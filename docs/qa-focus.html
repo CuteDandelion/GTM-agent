@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GTM assessment card focused QA</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 24px; background: #ede9e2; color: #101828; font: 14px Inter, system-ui, sans-serif; }
+      h1 { margin: 0 0 20px; font-size: 20px; }
+      main { display: flex; gap: 18px; }
+      figure { margin: 0; }
+      figcaption { margin-bottom: 8px; font-weight: 700; }
+      .crop { position: relative; width: 185px; height: 240px; overflow: hidden; background: #fff; }
+      .source img { position: absolute; width: 768px; height: 512px; max-width: none; left: -282px; top: -155px; }
+      .implementation img { position: absolute; width: 231px; height: 476px; max-width: none; left: -23px; top: -145px; }
+    </style>
+  </head>
+  <body>
+    <h1>Focused assessment-card comparison</h1>
+    <main>
+      <figure><figcaption>Approved reference</figcaption><div class="crop source"><img src="/docs/images/conversational-gtm-prototype.png" alt="Approved company assessment card" /></div></figure>
+      <figure><figcaption>Rendered implementation</figcaption><div class="crop implementation"><img src="/docs/qa/implementation-phone-final-v2.png" alt="Rendered company assessment card" /></div></figure>
+    </main>
+  </body>
+</html>
