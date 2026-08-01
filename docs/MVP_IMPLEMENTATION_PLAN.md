@@ -2,7 +2,7 @@
 
 Status: Approved planning baseline
 Date: 2026-08-01
-Delivery target: Android APK backed by free-tier Render and Supabase infrastructure
+Delivery target: Android APK backed by the existing Bluerose Kubernetes server and Supabase Free infrastructure
 
 ## 1. Product outcome
 
@@ -29,7 +29,7 @@ The MVP is successful when the operator can install the APK, complete seller-pro
 5. **The workflow is an application-owned DAG.** Dependencies, retries, budgets, conditional branches, and completion rules are deterministic and durable.
 6. **Routing is model-aware and tool-aware.** Each DAG node declares its model and tool policy.
 7. **External actions remain human-controlled.** The MVP prepares sales material but does not send outreach or modify external systems.
-8. **Free infrastructure is a constraint.** The backend uses one free Render web service and a separate Supabase Free project. OpenAI API usage remains a variable cost.
+8. **No-new-hosting-cost infrastructure is a constraint.** The backend uses a small isolated workload on the existing Bluerose Kubernetes server and a separate Supabase Free project. OpenAI API usage remains a variable cost.
 
 ## 3. MVP scope
 
@@ -79,7 +79,7 @@ flowchart TB
         REALTIME["Realtime"]
     end
 
-    subgraph Render["Render Free Web Service"]
+    subgraph Bluerose["Bluerose Kubernetes · gtm-agent namespace"]
         API["Conversation API"]
         DAG["Durable DAG scheduler"]
         ROUTER["Model and tool router"]
@@ -118,7 +118,7 @@ flowchart TB
     REALTIME --> APK
 ```
 
-The APK contains presentation, local drafts, session management, and realtime subscriptions. Model credentials, privileged Supabase credentials, crawling, orchestration, and tool execution remain on Render.
+The APK contains presentation, local drafts, session management, and realtime subscriptions. Model credentials, privileged Supabase credentials, crawling, orchestration, and tool execution remain in the Bluerose API workload.
 
 ## 5. Model-aware orchestration
 
@@ -391,9 +391,9 @@ Security requirements:
 - Run security and performance advisors after schema changes.
 - Test anonymous, owner, and cross-user access paths.
 
-## 11. Render deployment
+## 11. Bluerose deployment
 
-The free deployment contains one Render web service running:
+The deployment contains one API workload in a dedicated `gtm-agent` Kubernetes namespace running:
 
 - Conversation API.
 - DAG scheduler.
@@ -403,24 +403,29 @@ The free deployment contains one Render web service running:
 - OpenAI API integration.
 - Supabase privileged integration.
 
-There is no paid background worker, Render Postgres, or Render Key Value instance in the MVP.
+There is no application database or persistent volume on Bluerose. Supabase remains the durable data, authentication, Storage, and Realtime layer.
 
-The service checkpoints every node attempt in Supabase. If the free service sleeps or restarts, the next request resumes from the first incomplete node without repeating completed work.
+The service checkpoints every node attempt in Supabase. If the pod restarts or is rescheduled, the next request resumes from the first incomplete node without repeating completed work.
 
 Required deployment configuration:
 
-- Node.js 22.
-- Health and readiness endpoints.
+- Immutable GHCR image built with Node.js 22.
+- A ClusterIP service exposed only through the existing Cloudflare Tunnel.
+- Liveness and readiness endpoints.
 - Graceful shutdown.
 - Resume-incomplete-workflow startup check.
 - Structured logging with workflow and node IDs.
 - Environment validation.
 - Page, call, token, time, concurrency, and cost budgets.
+- Explicit CPU and memory requests and limits sized for the shared single-node cluster.
+- A pinned rollback image and Kubernetes rollout history.
 
-Secrets stored only on Render:
+Secrets stored only in the `gtm-agent-api-secrets` Kubernetes Secret:
 
 ```text
 OPENAI_API_KEY
+SUPABASE_URL
+SUPABASE_PUBLISHABLE_KEY
 SUPABASE_SECRET_KEY
 ```
 
@@ -429,7 +434,7 @@ Public configuration allowed in the APK:
 ```text
 SUPABASE_URL
 SUPABASE_PUBLISHABLE_KEY
-RENDER_API_URL
+EXPO_PUBLIC_API_BASE_URL
 ```
 
 ## 12. Repository structure
@@ -437,7 +442,7 @@ RENDER_API_URL
 ```text
 apps/
   mobile/                 Expo Android application
-  api/                    Render web service
+  api/                    Bluerose-hosted Fastify API
 
 packages/
   contracts/              Shared schemas and events
@@ -457,7 +462,8 @@ supabase/
   seed.sql
   tests/
 
-render.yaml
+Dockerfile
+deploy/bluerose/deployment.yaml
 ```
 
 ## 13. Implementation milestones
@@ -534,26 +540,27 @@ Exit criterion: one real domain produces a complete, evidence-backed dossier thr
 
 Exit criterion: a five-domain batch completes when one target fails and explains the ranking of the remaining targets.
 
-### Milestone 9 — Render and mobile builds
+### Milestone 9 — Bluerose and mobile builds
 
-- Authenticate Render CLI.
-- Add and validate `render.yaml`.
-- Configure secrets without exposing their values.
-- Deploy the free service.
-- Verify cold-start and workflow-resume behavior.
+- Build and smoke-test the production API container locally.
+- Add and validate the isolated Bluerose Kubernetes manifest.
+- Inspect cluster capacity and protected workloads before deployment.
+- Configure Kubernetes secrets without exposing their values.
+- Deploy the pinned image and verify pod restart and workflow-resume behavior.
+- Publish only the healthy ClusterIP service through a dedicated Cloudflare Tunnel hostname.
 - Build and sign the Android APK.
 - Build the iOS test target.
 - Run the mobile E2E suite on Android Emulator and Xcode Simulator.
 - Test the APK on a physical Android device.
 - Run a physical-iPhone smoke test when a device is available.
 
-Exit criterion: the installed APK and the iOS Simulator build complete the production domain-analysis journey against Render and Supabase, with no platform-specific blocking defect.
+Exit criterion: the installed APK and the iOS Simulator build complete the production domain-analysis journey against Bluerose and Supabase, with no platform-specific blocking defect.
 
 ### Milestone 10 — Release qualification
 
 - Run the complete unit, contract, API, database, integration, mobile, security, and E2E suites.
 - Run bounded live OpenAI routing and tool-use evaluations with an explicit spend ceiling.
-- Run the deployed Render/Supabase smoke and recovery suites.
+- Run the deployed Bluerose/Supabase smoke and recovery suites.
 - Verify test-data cleanup and inspect production-like logs for leaked secrets or unhandled errors.
 - Produce a release evidence report containing commands, versions, pass counts, failures, and accepted limitations.
 
@@ -569,8 +576,8 @@ Testing is part of every milestone, not a final cleanup phase. Model calls are m
 |---|---|---|
 | Local | Development, unit, API, database, and deterministic E2E | Local Supabase; fake OpenAI and fixture web server |
 | CI | Clean, repeatable merge gate | Ephemeral local Supabase; fake OpenAI and fixture web server |
-| Live test | Bounded provider and tool verification | Supabase test data, Render deployment, live OpenAI with spend cap |
-| Production MVP | Final smoke and operator use | Free Render service and dedicated Supabase MVP project |
+| Live test | Bounded provider and tool verification | Supabase test data, Bluerose deployment, live OpenAI with spend cap |
+| Production MVP | Final smoke and operator use | Existing Bluerose Kubernetes server and dedicated Supabase MVP project |
 
 Tests must use synthetic users, domains, documents, and cleanup tokens. Cleanup fails closed unless the expected test marker and exact cleanup token are present.
 
@@ -722,15 +729,15 @@ Live provider tests never run automatically on every commit.
 
 ### Integration tests
 
-- Render API with Supabase Auth, Postgres, Storage, and Realtime.
+- Bluerose API with Supabase Auth, Postgres, Storage, and Realtime.
 - DAG scheduler with the model adapter and controlled tool gateway.
 - Crawler and document parser with the evidence pipeline.
 - Evidence pipeline with company profile, ICP, opportunity, and critic nodes.
 - Interactive-object persistence with realtime mobile updates.
 - Batch orchestration with mixed success, retryable failure, and permanent failure.
-- Render cold start followed by workflow recovery.
+- Kubernetes pod restart followed by workflow recovery.
 
-Integration tests use fixture sites and fake model responses by default. A small separate lane verifies the same seams against live OpenAI and the deployed Render service.
+Integration tests use fixture sites and fake model responses by default. A small separate lane verifies the same seams against live OpenAI and the deployed Bluerose service.
 
 ### Mobile tests
 
@@ -738,7 +745,7 @@ Integration tests use fixture sites and fake model responses by default. A small
 - Authentication, logout, expiry, and token refresh.
 - Realtime reconnect, event replay, duplicate events, and out-of-order events.
 - Offline drafts and interrupted message submission.
-- Render cold start and visible recovery state.
+- API restart and visible recovery state.
 - App termination and conversation recovery.
 - Narrow-screen layout, safe areas, keyboard avoidance, and orientation changes.
 - Android back-button behavior and notification/deep-link handling.
@@ -767,7 +774,7 @@ Mandatory journeys:
 8. Cancel and resume a research run.
 9. Disconnect networking mid-run, reconnect, and recover the correct state.
 10. Attempt cross-user access and verify denial in both API and UI.
-11. Reopen the app after the Render service has slept and complete the journey.
+11. Reopen the app after a Bluerose API pod restart and complete the journey.
 12. Export the completed dossier and verify its required sections and citations.
 
 Run the deterministic E2E suite on Android Emulator and Xcode Simulator. Run a smaller deployed smoke suite on a physical Android device and, when available, a physical iPhone.
@@ -776,7 +783,7 @@ Run the deterministic E2E suite on Android Emulator and Xcode Simulator. Run a s
 
 - Measure non-AI API latency separately from provider latency.
 - Verify bounded concurrency for five-domain batches.
-- Exercise Render cold starts and provider rate limits.
+- Exercise Kubernetes pod restarts and provider rate limits.
 - Confirm memory remains bounded while reading maximum-size allowed documents.
 - Confirm one slow domain or tool does not block unrelated ready nodes.
 - Load-test realtime subscriptions and object patches at the MVP's expected single-operator scale.
@@ -797,7 +804,7 @@ Before a release candidate:
 
 - Full Android Emulator and iOS Simulator E2E suites.
 - Bounded live OpenAI evaluations.
-- Deployed Render/Supabase integration and recovery tests.
+- Deployed Bluerose/Supabase integration and recovery tests.
 - Physical Android smoke test.
 - Physical iPhone smoke test when available.
 - Security scan and release evidence report.
@@ -820,7 +827,7 @@ The MVP is complete only when:
 12. A five-domain batch tolerates one failed target.
 13. Cross-user access is denied by API authorization, RLS, and Storage policies.
 14. Unit, contract, API, database, integration, security, mobile, and E2E quality gates pass from a clean checkout.
-15. The deployed Render/Supabase smoke and recovery suite passes.
+15. The deployed Bluerose/Supabase smoke and recovery suite passes.
 16. Bounded live OpenAI tests confirm model routing, web search, file search, citations, and usage recording.
 17. The Android and iOS application builds contain no privileged OpenAI or Supabase credentials.
 18. The system performs no autonomous outreach or external writes.
@@ -830,15 +837,16 @@ The MVP is complete only when:
 ## 16. Current readiness
 
 - Repository: greenfield implementation on `codex/gtm-orchestrator-mvp`, freshly indexed with a persisted graph artifact.
-- Render CLI: installed at `/opt/homebrew/bin/render`, version `2.22.0`.
-- Render authentication: confirmed; the one-service free blueprint validates successfully.
+- Bluerose access: confirmed through the hardened SSH wrapper; Kubernetes control plane and node are healthy.
+- Protected services: Portfolio and Cloudflare Tunnel remain healthy and untouched; the Portfolio endpoint returned HTTP 200 three times during pre-deployment inspection.
+- Bluerose API contract: dedicated namespace, ClusterIP service, health probes, resource bounds, secret references, and pinned-image placeholder are locally validated.
 - Supabase account access: confirmed.
 - Existing Supabase project: unrelated and protected from reuse.
 - New Supabase MVP project: not yet created.
 - OpenAI API key: existing local key reused without exposing its value; bounded live calls remain gated by an explicit spend ceiling.
 - Canonical mobile visual baseline: approved at `docs/images/conversational-gtm-prototype.png` and locked as the implementation source of truth.
-- Foundation implementation: monorepo, locked-design client/prototype, API surface, model-aware DAG, agent/tool adapters, safe crawler, document parsers, shared contracts, Supabase migration, Render blueprint, and EAS profiles are present with green deterministic tests, type checks, lint, and production build.
-- Remaining release work: create and verify the dedicated Supabase project, deploy Render, authorize Expo/EAS, install full Xcode plus Simulator runtime, exercise live OpenAI under a spend ceiling, complete the missing persistence/onboarding/upload/export paths, and pass the full Android/iOS/deployed E2E and physical-device acceptance gates.
+- Foundation implementation: monorepo, locked-design client/prototype, API surface, model-aware DAG, agent/tool adapters, safe crawler, document parsers, shared contracts, Supabase migration, Bluerose container/Kubernetes contract, and EAS profiles are present. The post-pivot local regression, live-local Supabase isolation lane, container smoke checks, and strict manifest validation pass.
+- Remaining release work: create and verify the dedicated Supabase project, publish a pinned container, deploy it to Bluerose, add the Cloudflare route only after internal readiness, authorize Expo/EAS, install full Xcode plus Simulator runtime, exercise live OpenAI under a spend ceiling, complete the missing onboarding/upload/export paths, and pass the full Android/iOS/deployed E2E and physical-device acceptance gates.
 
 ## 17. Official platform references
 
@@ -850,5 +858,5 @@ The MVP is complete only when:
 - [OpenAI MCP and Connectors](https://developers.openai.com/api/docs/guides/tools-connectors-mcp)
 - [Supabase Data API security](https://supabase.com/docs/guides/api/securing-your-api)
 - [Supabase free-project pausing](https://supabase.com/docs/guides/platform/free-project-pausing)
-- [Render CLI](https://render.com/docs/cli)
-- [Render free tier](https://render.com/docs/free)
+- [Kubernetes Deployments](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+- [Kubernetes probes](https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/)

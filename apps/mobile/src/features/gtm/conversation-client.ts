@@ -4,6 +4,7 @@ export interface StartDomainResearchInput {
   message: string;
   domains: string[];
   documentIds?: string[];
+  accessToken?: string;
   fetcher?: typeof fetch;
 }
 
@@ -19,7 +20,10 @@ export async function startDomainResearch(input: StartDomainResearchInput): Prom
     `${origin}/api/v1/conversations/${encodeURIComponent(input.conversationId)}/messages`,
     {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        ...(input.accessToken ? { authorization: `Bearer ${input.accessToken}` } : {}),
+        "content-type": "application/json",
+      },
       body: JSON.stringify({
         message: input.message,
         domains: input.domains,

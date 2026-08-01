@@ -131,11 +131,13 @@ function extractDomains(message: string): string[] {
 export function GtmConversationScreen({
   initialState = "progress",
   apiBaseUrl,
+  accessToken,
   conversationId = "11111111-1111-4111-8111-111111111111",
   fetcher = fetch,
 }: {
   initialState?: ConversationState;
   apiBaseUrl?: string;
+  accessToken?: string;
   conversationId?: string;
   fetcher?: typeof fetch;
 }) {
@@ -154,7 +156,14 @@ export function GtmConversationScreen({
     setSubmitting(true);
     setError(undefined);
     try {
-      if (apiBaseUrl) await startDomainResearch({ apiBaseUrl, conversationId, message: trimmed, domains, fetcher });
+      if (apiBaseUrl) await startDomainResearch({
+        apiBaseUrl,
+        conversationId,
+        message: trimmed,
+        domains,
+        ...(accessToken ? { accessToken } : {}),
+        fetcher,
+      });
       setMessage(trimmed);
       setDraft("");
     } catch (caught) {

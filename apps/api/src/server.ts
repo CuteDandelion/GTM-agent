@@ -24,11 +24,41 @@ export interface ResearchService {
   resumeRun(runId: string, ownerId?: string): Promise<unknown | undefined>;
 }
 
+export interface SellerProfileInput {
+  businessName: string;
+  offerSummary: string;
+  capabilities: string[];
+  proofPoints: string[];
+  constraints: Record<string, unknown>;
+}
+
+export interface ConversationInput {
+  title: string;
+  sellerProfileId?: string;
+  icpDefinitionId?: string;
+}
+
+export interface MessageInput {
+  role: "user" | "assistant" | "system" | "tool";
+  content: Record<string, unknown>;
+}
+
+export interface WorkspaceService {
+  getSellerProfile(ownerId: string): Promise<unknown | undefined>;
+  upsertSellerProfile(ownerId: string, input: SellerProfileInput): Promise<unknown>;
+  createConversation(ownerId: string, input: ConversationInput): Promise<unknown>;
+  getConversation(ownerId: string, conversationId: string): Promise<unknown | undefined>;
+  appendMessage(ownerId: string, conversationId: string, input: MessageInput): Promise<unknown | undefined>;
+  listMessages(ownerId: string, conversationId: string): Promise<unknown[] | undefined>;
+}
+
 type BuildServerOptions = {
   logger?: Exclude<FastifyServerOptions["logger"], undefined>;
   researchService?: ResearchService;
   authService?: AuthService;
   objectActionService?: InteractiveObjectService;
+  workspaceService?: WorkspaceService;
+  configurationReady?: boolean;
 };
 
 const conversationParamsSchema = z.object({ conversationId: z.uuid() });
@@ -44,6 +74,18 @@ const objectActionBodySchema = z.object({
   expectedVersion: z.number().int().positive(),
   payload: z.record(z.string(), z.unknown()).default({}),
 });
+const sellerProfileBodySchema = z.object({
+  businessName: z.string().trim().min(1).max(200),
+  offerSummary: z.string().trim().min(1).max(4_000),
+  capabilities: z.array(z.string().trim().min(1).max(200)).max(50),
+  proofPoints: z.array(z.string().trim().min(1).max(1_000)).max(50),
+  constraints: z.record(z.string(), z.unknown()),
+}).strict();
+const conversationBodySchema = z.object({
+  title: z.string().trim().min(1).max(300),
+  sellerProfileId: z.uuid().optional(),
+  icpDefinitionId: z.uuid().optional(),
+}).strict();
 
 export function buildServer(options: BuildServerOptions = {}) {
   const server = Fastify({
@@ -64,10 +106,18 @@ export function buildServer(options: BuildServerOptions = {}) {
     version: "0.1.0"
   }));
 
-  server.get("/ready", async () => ({
-    status: "ready",
-    checks: { configuration: "ok" }
-  }));
+  server.get("/ready", async (_request, reply) => {
+    if (options.configurationReady === false) {
+      return reply.code(503).send({
+        status: "not_ready",
+        checks: { configuration: "missing" },
+      });
+    }
+    return reply.send({
+      status: "ready",
+      checks: { configuration: "ok" },
+    });
+  });
 
   server.get("/api/v1/fixtures/acme", async () => canonicalFixturePayload);
 
@@ -76,6 +126,59 @@ export function buildServer(options: BuildServerOptions = {}) {
     const user = await options.authService.authenticate(authorization);
     return user ? { authorized: true, ownerId: user.userId } : { authorized: false, ownerId: undefined };
   };
+
+  server.get("/api/v1/seller-profile", async (request, reply) => {
+    const auth = await authenticate(request.headers.authorization);
+    if (!auth.authorized || !auth.ownerId) return reply.code(401).send({ error: "unauthorized" });
+    if (!options.workspaceService) return reply.code(503).send({ error: "workspace_service_unavailable" });
+    const profile = await options.workspaceService.getSellerProfile(auth.ownerId);
+    if (!profile) return reply.code(404).send({ error: "seller_profile_not_found" });
+    return reply.send(profile);
+  });
+
+  server.put("/api/v1/seller-profile", async (request, reply) => {
+    const auth = await authenticate(request.headers.authorization);
+    if (!auth.authorized || !auth.ownerId) return reply.code(401).send({ error: "unauthorized" });
+    const body = sellerProfileBodySchema.safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "invalid_request", details: body.error.issues });
+    if (!options.workspaceService) return reply.code(503).send({ error: "workspace_service_unavailable" });
+    return reply.send(await options.workspaceService.upsertSellerProfile(auth.ownerId, body.data));
+  });
+
+  server.post("/api/v1/conversations", async (request, reply) => {
+    const auth = await authenticate(request.headers.authorization);
+    if (!auth.authorized || !auth.ownerId) return reply.code(401).send({ error: "unauthorized" });
+    const body = conversationBodySchema.safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "invalid_request", details: body.error.issues });
+    if (!options.workspaceService) return reply.code(503).send({ error: "workspace_service_unavailable" });
+    return reply.code(201).send(await options.workspaceService.createConversation(auth.ownerId, {
+      title: body.data.title,
+      ...(body.data.sellerProfileId ? { sellerProfileId: body.data.sellerProfileId } : {}),
+      ...(body.data.icpDefinitionId ? { icpDefinitionId: body.data.icpDefinitionId } : {}),
+    }));
+  });
+
+  server.get("/api/v1/conversations/:conversationId", async (request, reply) => {
+    const auth = await authenticate(request.headers.authorization);
+    if (!auth.authorized || !auth.ownerId) return reply.code(401).send({ error: "unauthorized" });
+    const params = conversationParamsSchema.safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ error: "invalid_request" });
+    if (!options.workspaceService) return reply.code(503).send({ error: "workspace_service_unavailable" });
+    const conversation = await options.workspaceService.getConversation(auth.ownerId, params.data.conversationId);
+    if (!conversation) return reply.code(404).send({ error: "conversation_not_found" });
+    return reply.send(conversation);
+  });
+
+  server.get("/api/v1/conversations/:conversationId/messages", async (request, reply) => {
+    const auth = await authenticate(request.headers.authorization);
+    if (!auth.authorized || !auth.ownerId) return reply.code(401).send({ error: "unauthorized" });
+    const params = conversationParamsSchema.safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ error: "invalid_request" });
+    if (!options.workspaceService) return reply.code(503).send({ error: "workspace_service_unavailable" });
+    const messages = await options.workspaceService.listMessages(auth.ownerId, params.data.conversationId);
+    if (!messages) return reply.code(404).send({ error: "conversation_not_found" });
+    return reply.send(messages);
+  });
 
   server.post("/api/v1/conversations/:conversationId/messages", async (request, reply) => {
     const auth = await authenticate(request.headers.authorization);
@@ -90,6 +193,18 @@ export function buildServer(options: BuildServerOptions = {}) {
     }
     if (!options.researchService) {
       return reply.code(503).send({ error: "research_service_unavailable" });
+    }
+    if (options.workspaceService) {
+      if (!auth.ownerId) return reply.code(401).send({ error: "unauthorized" });
+      const persisted = await options.workspaceService.appendMessage(auth.ownerId, params.data.conversationId, {
+        role: "user",
+        content: {
+          text: body.data.message,
+          domains: body.data.domains,
+          documentIds: body.data.documentIds,
+        },
+      });
+      if (!persisted) return reply.code(404).send({ error: "conversation_not_found" });
     }
 
     const run = await options.researchService.startDomainResearch({

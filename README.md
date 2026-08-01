@@ -45,4 +45,4 @@ npm start -w @gtm/mobile
 
 ## Deployment status
 
-The Render blueprint and EAS profiles are validated. Cloud deployment is intentionally not considered complete until a dedicated Supabase project is created, its migration and isolation tests pass, Render secrets are configured, and Android/iOS builds and E2E journeys pass against the deployed service.
+The API now targets an isolated Kubernetes workload on the existing Bluerose server, backed by Supabase. Its container and Kubernetes contracts must pass locally before a pinned image is published or any server resource is changed. Cloud deployment is not complete until the dedicated Supabase project, Bluerose rollout, Cloudflare route, Android/iOS builds, and deployed E2E journeys are verified.

@@ -36,13 +36,14 @@ describe("GtmConversationScreen", () => {
   });
 
   it("submits a typed company domain through the conversational composer", async () => {
-    const fetcher = jest.fn(async () => new Response(JSON.stringify({
+    const fetcher = jest.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({
       runId: "run-1",
       status: "queued",
       interactiveObject: { id: "progress-run-1", type: "workflow_progress", version: 1, title: "Researching example.com", status: "running", steps: [] },
     }), { status: 202 }));
     const screen = await render(<GtmConversationScreen
       apiBaseUrl="https://api.example.com"
+      accessToken="supabase-access-token"
       conversationId="11111111-1111-4111-8111-111111111111"
       fetcher={fetcher as typeof fetch}
     />);
@@ -51,6 +52,10 @@ describe("GtmConversationScreen", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Send message" }));
 
     await waitFor(() => expect(fetcher).toHaveBeenCalled());
+    expect(fetcher.mock.calls[0]![1]!.headers).toEqual({
+      authorization: "Bearer supabase-access-token",
+      "content-type": "application/json",
+    });
     await waitFor(() => screen.getByText("Analyze example.com"));
   });
 });

@@ -14,6 +14,7 @@
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present && node --test tests/**/*.test.mjs",
     "test:database:contract": "node --test tests/database/*.test.mjs",
+    "test:supabase:local": "node scripts/test-local-supabase.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {

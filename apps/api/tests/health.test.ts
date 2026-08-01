@@ -63,4 +63,20 @@ describe("service health boundary", () => {
     expect(payload.assessment).toMatchObject({ company: "Acme", icpScore: 82 });
     expect(payload.evidence.items).toHaveLength(3);
   });
+
+  it("fails readiness when required production configuration is unavailable", async () => {
+    const serverModule = await loadServerModule();
+    const buildServer = Reflect.get(serverModule, "buildServer");
+    const server = buildServer({ logger: false, configurationReady: false }) as ServerLike;
+    openServers.push(server);
+    const origin = await server.listen({ host: "127.0.0.1", port: 0 });
+
+    const response = await fetch(`${origin}/ready`);
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      status: "not_ready",
+      checks: { configuration: "missing" },
+    });
+  });
 });
