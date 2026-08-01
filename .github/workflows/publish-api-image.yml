@@ -1,6 +1,9 @@
 name: Publish API image
 
 on:
+  push:
+    branches:
+      - codex/gtm-orchestrator-mvp
   workflow_dispatch:
 
 permissions:
