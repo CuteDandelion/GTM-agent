@@ -1,0 +1,37 @@
+FROM node:22.22.2-bookworm-slim AS dependencies
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/mobile/package.json apps/mobile/package.json
+COPY apps/prototype/package.json apps/prototype/package.json
+COPY packages/agents/package.json packages/agents/package.json
+COPY packages/contracts/package.json packages/contracts/package.json
+COPY packages/crawler/package.json packages/crawler/package.json
+COPY packages/documents/package.json packages/documents/package.json
+COPY packages/orchestration/package.json packages/orchestration/package.json
+COPY packages/tools/package.json packages/tools/package.json
+
+RUN npm ci --workspace @gtm/api --include-workspace-root --omit=dev
+
+FROM node:22.22.2-bookworm-slim AS runtime
+
+ENV NODE_ENV=production
+ENV HOST=0.0.0.0
+ENV PORT=3000
+
+WORKDIR /app
+
+COPY --from=dependencies /app/node_modules ./node_modules
+COPY --from=dependencies /app/apps ./apps
+COPY --from=dependencies /app/packages ./packages
+COPY package.json package-lock.json ./
+COPY apps/api ./apps/api
+COPY packages ./packages
+
+USER node
+
+EXPOSE 3000
+
+CMD ["npm", "start", "-w", "@gtm/api"]

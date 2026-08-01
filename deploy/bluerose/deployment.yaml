@@ -1,0 +1,125 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gtm-agent
+  labels:
+    app.kubernetes.io/name: gtm-agent
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gtm-agent-api
+  namespace: gtm-agent
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gtm-agent-api
+  namespace: gtm-agent
+  labels:
+    app.kubernetes.io/name: gtm-agent-api
+spec:
+  replicas: 1
+  progressDeadlineSeconds: 180
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gtm-agent-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gtm-agent-api
+    spec:
+      serviceAccountName: gtm-agent-api
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: ghcr.io/cutedandelion/gtm-agent-api:REPLACE_WITH_COMMIT_SHA
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: HOST
+              value: 0.0.0.0
+            - name: PORT
+              value: "3000"
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gtm-agent-api-secrets
+                  key: OPENAI_API_KEY
+            - name: SUPABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: gtm-agent-api-secrets
+                  key: SUPABASE_URL
+            - name: SUPABASE_PUBLISHABLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gtm-agent-api-secrets
+                  key: SUPABASE_PUBLISHABLE_KEY
+            - name: SUPABASE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gtm-agent-api-secrets
+                  key: SUPABASE_SECRET_KEY
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 768Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gtm-agent-api
+  namespace: gtm-agent
+  labels:
+    app.kubernetes.io/name: gtm-agent-api
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: gtm-agent-api
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+      protocol: TCP

@@ -1,0 +1,26 @@
+{
+  "name": "conversational-gtm-orchestrator",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present && node --test tests/**/*.test.mjs",
+    "test:database:contract": "node --test tests/database/*.test.mjs",
+    "test:supabase:local": "node scripts/test-local-supabase.mjs",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "4.1.10",
+    "supabase": "2.111.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}

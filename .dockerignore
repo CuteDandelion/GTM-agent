@@ -1,0 +1,12 @@
+.git
+.codebase-memory
+.env
+.env.*
+!.env.example
+node_modules
+**/node_modules
+**/coverage
+**/dist
+docs
+tests
+*.log
