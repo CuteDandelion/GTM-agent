@@ -9,6 +9,44 @@ import {
 } from "../src/index.js";
 
 describe("deterministic DAG scheduler", () => {
+  it("retries an interrupted node after cancellation without looping on its cumulative attempts", async () => {
+    const workflow = defineWorkflow({
+      id: "cancel-resume-attempts",
+      budget: { maxNodeExecutions: 4 },
+      nodes: [
+        { id: "done", dependencies: [], role: "deterministic", allowedTools: [], requiredTools: [], retries: 0, timeoutMs: 1_000 },
+        { id: "interrupted", dependencies: ["done"], role: "deterministic", allowedTools: [], requiredTools: [], retries: 0, timeoutMs: 1_000 },
+      ],
+    });
+    const checkpoints = new InMemoryCheckpointStore();
+    await checkpoints.save({
+      runId: "run-cancelled",
+      workflowId: workflow.id,
+      status: "cancelled",
+      executionCount: 2,
+      nodes: {
+        done: { status: "completed", attempts: 1, toolsUsed: [], output: { retained: true } },
+        interrupted: { status: "running", attempts: 1, toolsUsed: [] },
+      },
+    });
+    const executed: string[] = [];
+    const scheduler = new DagScheduler({
+      workflow,
+      checkpoints,
+      executor: async ({ node }) => {
+        executed.push(node.id);
+        return { resumed: node.id };
+      },
+    });
+
+    const resumed = await scheduler.resume("run-cancelled", {});
+
+    expect(resumed.status).toBe("completed");
+    expect(executed).toEqual(["interrupted"]);
+    expect(resumed.nodes.done?.attempts).toBe(1);
+    expect(resumed.nodes.interrupted?.attempts).toBe(2);
+  });
+
   it("resumes without rerunning completed nodes", async () => {
     const workflow = defineWorkflow({
       id: "resume-test",

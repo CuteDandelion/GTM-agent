@@ -845,7 +845,7 @@ The MVP is complete only when:
 - New Supabase MVP project: not yet created.
 - OpenAI API key: existing local key reused without exposing its value; bounded live calls remain gated by an explicit spend ceiling.
 - Canonical mobile visual baseline: approved at `docs/images/conversational-gtm-prototype.png` and locked as the implementation source of truth.
-- Foundation implementation: monorepo, locked-design client/prototype, API surface, model-aware DAG, agent/tool adapters, safe crawler, document parsers, shared contracts, Supabase migration, Bluerose container/Kubernetes contract, and EAS profiles are present. The post-pivot local regression, live-local Supabase isolation lane, container smoke checks, and strict manifest validation pass.
+- Foundation implementation: monorepo, locked-design client/prototype, API surface, model-aware DAG, agent/tool adapters, safe crawler, document parsers, shared contracts, Supabase migration, durable Supabase research-run and DAG-checkpoint recovery, Bluerose container/Kubernetes contract, and EAS profiles are present. The post-pivot local regression, live-local Supabase isolation/recovery lane, container smoke checks, and strict manifest validation pass.
 - Remaining release work: create and verify the dedicated Supabase project, publish a pinned container, deploy it to Bluerose, add the Cloudflare route only after internal readiness, authorize Expo/EAS, install full Xcode plus Simulator runtime, exercise live OpenAI under a spend ceiling, complete the missing onboarding/upload/export paths, and pass the full Android/iOS/deployed E2E and physical-device acceptance gates.
 
 ## 17. Official platform references

@@ -7,7 +7,7 @@ The approved product scope lives in [`docs/MVP_IMPLEMENTATION_PLAN.md`](docs/MVP
 ## Architecture
 
 - `apps/mobile` — Expo 57 React Native client and EAS Android/iOS build profiles.
-- `apps/api` — Fastify API for authentication, research runs, cancellation/resume, and interactive-object actions.
+- `apps/api` — Fastify API for authentication, Supabase-backed research-run/checkpoint recovery, cancellation/resume, and interactive-object actions.
 - `apps/prototype` — protected browser fidelity harness for the approved mobile design.
 - `packages/orchestration` — durable, budgeted DAG scheduler and GTM workflow.
 - `packages/agents` — OpenAI Agents SDK adapter with role/model/tool policies.

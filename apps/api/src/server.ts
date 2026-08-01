@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import type { AuthService } from "./supabase-auth.js";
 import { StaleObjectVersionError, type InteractiveObjectService } from "./interactive-actions.js";
+import { ResearchRunConflictError } from "./research-service.js";
 
 const canonicalFixturePayload = parseCanonicalFixtureBundle(canonicalAcmeFixtures);
 
@@ -245,7 +246,15 @@ export function buildServer(options: BuildServerOptions = {}) {
     const params = runParamsSchema.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ error: "invalid_request" });
     if (!options.researchService) return reply.code(503).send({ error: "research_service_unavailable" });
-    const run = await options.researchService.resumeRun(params.data.runId, auth.ownerId);
+    let run: unknown | undefined;
+    try {
+      run = await options.researchService.resumeRun(params.data.runId, auth.ownerId);
+    } catch (error) {
+      if (error instanceof ResearchRunConflictError) {
+        return reply.code(409).send({ error: "run_is_active_or_changed" });
+      }
+      throw error;
+    }
     if (!run) return reply.code(404).send({ error: "run_not_found" });
     return reply.code(202).send(run);
   });

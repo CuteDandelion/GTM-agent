@@ -21,6 +21,13 @@ export interface ResearchRunStore {
   save(snapshot: ResearchRunSnapshot): Promise<void>;
 }
 
+export class ResearchRunConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ResearchRunConflictError";
+  }
+}
+
 export class InMemoryResearchRunStore implements ResearchRunStore {
   readonly #runs = new Map<string, ResearchRunSnapshot>();
 
@@ -50,7 +57,11 @@ export interface CreateResearchServiceOptions {
 export function createResearchService(options: CreateResearchServiceOptions): ResearchService {
   const createRunId = options.createRunId ?? randomUUID;
   const now = options.now ?? (() => new Date().toISOString());
-  const enqueue = options.enqueue ?? ((job) => queueMicrotask(() => void job()));
+  const enqueue = options.enqueue ?? ((job) => queueMicrotask(() => {
+    void job().catch((error) => console.error("research background job failed", error));
+  }));
+  const activeRunTokens = new Map<string, { token: symbol; started: boolean }>();
+  const pendingReruns = new Map<string, { snapshot: ResearchRunSnapshot; resume: boolean }>();
   const loadOwned = async (runId: string, ownerId?: string) => {
     const snapshot = await options.runStore.load(runId);
     if (!snapshot || (ownerId && snapshot.input.ownerId !== ownerId)) return undefined;
@@ -58,10 +69,21 @@ export function createResearchService(options: CreateResearchServiceOptions): Re
   };
 
   const enqueueExecution = (snapshot: ResearchRunSnapshot, resume: boolean) => {
+    const active = activeRunTokens.get(snapshot.runId);
+    if (active) {
+      if (active.started) pendingReruns.set(snapshot.runId, { snapshot, resume });
+      return;
+    }
+    const executionToken = Symbol(snapshot.runId);
+    activeRunTokens.set(snapshot.runId, { token: executionToken, started: false });
     enqueue(async () => {
-      const running = { ...snapshot, status: "running" as const, updatedAt: now() };
-      await options.runStore.save(running);
+      const scheduled = activeRunTokens.get(snapshot.runId);
+      if (scheduled?.token !== executionToken) return;
+      scheduled.started = true;
       try {
+        const { error: _previousError, ...retryableSnapshot } = snapshot;
+        const running = { ...retryableSnapshot, status: "running" as const, updatedAt: now() };
+        await options.runStore.save(running);
         const checkpoint = resume && options.scheduler.resume
           ? await options.scheduler.resume(snapshot.runId, snapshot.input)
           : await options.scheduler.run(snapshot.runId, snapshot.input);
@@ -70,12 +92,28 @@ export function createResearchService(options: CreateResearchServiceOptions): Re
           : checkpoint.status === "cancelled" ? "cancelled" : "failed";
         await options.runStore.save({ ...running, status, checkpoint, updatedAt: now() });
       } catch (error) {
-        await options.runStore.save({
-          ...running,
-          status: "failed",
-          error: error instanceof Error ? error.message : String(error),
-          updatedAt: now(),
-        });
+        if (error instanceof ResearchRunConflictError) return;
+        const { error: _previousError, ...retryableSnapshot } = snapshot;
+        const running = { ...retryableSnapshot, status: "running" as const, updatedAt: now() };
+        try {
+          await options.runStore.save({
+            ...running,
+            status: "failed",
+            error: error instanceof Error ? error.message : String(error),
+            updatedAt: now(),
+          });
+        } catch (saveError) {
+          if (!(saveError instanceof ResearchRunConflictError)) throw saveError;
+        }
+      } finally {
+        if (activeRunTokens.get(snapshot.runId)?.token === executionToken) {
+          activeRunTokens.delete(snapshot.runId);
+          const pending = pendingReruns.get(snapshot.runId);
+          if (pending) {
+            pendingReruns.delete(snapshot.runId);
+            enqueueExecution(pending.snapshot, pending.resume);
+          }
+        }
       }
     });
   };
@@ -114,16 +152,29 @@ export function createResearchService(options: CreateResearchServiceOptions): Re
     async cancelRun(runId, ownerId) {
       const snapshot = await loadOwned(runId, ownerId);
       if (!snapshot) return undefined;
-      await options.scheduler.cancel(runId);
+      if (["cancelled", "completed", "failed"].includes(snapshot.status)) return snapshot;
       const cancelled = { ...snapshot, status: "cancelled" as const, updatedAt: now() };
-      await options.runStore.save(cancelled);
+      try {
+        await options.runStore.save(cancelled);
+      } catch (error) {
+        if (error instanceof ResearchRunConflictError) return loadOwned(runId, ownerId);
+        throw error;
+      }
+      activeRunTokens.delete(runId);
+      try {
+        await options.scheduler.cancel(runId);
+      } catch {
+        // The durable cancelled state wins even if this process does not own the worker lease.
+      }
       return cancelled;
     },
     async resumeRun(runId, ownerId) {
       const snapshot = await loadOwned(runId, ownerId);
       if (!snapshot) return undefined;
-      const queued = { ...snapshot, status: "queued" as const, updatedAt: now() };
-      await options.runStore.save(queued);
+      if (snapshot.status === "completed") return snapshot;
+      const { error: _previousError, ...retryableSnapshot } = snapshot;
+      const queued = { ...retryableSnapshot, status: "queued" as const, updatedAt: now() };
+      if (snapshot.status !== "queued") await options.runStore.save(queued);
       enqueueExecution(queued, true);
       return queued;
     },

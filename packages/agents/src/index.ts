@@ -6,6 +6,7 @@ import {
   webSearchTool,
   type FunctionTool,
   type HostedTool,
+  type RunContext,
 } from "@openai/agents";
 import {
   resolveModel,
@@ -35,6 +36,12 @@ export interface AgentRunResult {
 
 export type AgentRuntime = (request: AgentRunRequest) => Promise<AgentRunResult>;
 
+export interface ToolRunContext {
+  runId: string;
+  nodeId: string;
+  ownerId: string;
+}
+
 function requireStructuredOutput(output: unknown): Record<string, unknown> {
   let candidate = output;
   if (typeof candidate === "string") {
@@ -52,7 +59,7 @@ function requireStructuredOutput(output: unknown): Record<string, unknown> {
 
 export interface FunctionToolAdapterDefinition {
   description: string;
-  handler(input: unknown): Promise<unknown>;
+  handler(input: unknown, context?: ToolRunContext): Promise<unknown>;
 }
 
 type AnyFunctionTool = FunctionTool<any, any, any>;
@@ -69,9 +76,26 @@ export function createFunctionToolAdapters(
       description: definition.description,
       parameters: functionToolInputSchema,
       strict: true,
-      execute: async ({ input }) => JSON.stringify(await definition.handler(input)),
+      execute: async ({ input }, runContext?: RunContext<ToolRunContext>) => JSON.stringify(
+        runContext?.context
+          ? await definition.handler(input, runContext.context)
+          : await definition.handler(input),
+      ),
     }),
   ]));
+}
+
+export function extractToolRunContext(input: unknown): ToolRunContext {
+  const parsed = z.object({
+    runId: z.string().min(1),
+    nodeId: z.string().min(1),
+    workflowInput: z.object({ ownerId: z.string().uuid() }).passthrough(),
+  }).parse(input);
+  return {
+    runId: parsed.runId,
+    nodeId: parsed.nodeId,
+    ownerId: parsed.workflowInput.ownerId,
+  };
 }
 
 const roleConfiguration: Record<AgentRole, {
@@ -196,6 +220,7 @@ export function createOpenAIAgentsRuntime(options: {
     });
 
     const result = await run(agent, JSON.stringify(request.input), {
+      context: extractToolRunContext(request.input),
       maxTurns: options.maxTurns ?? 12,
     });
     const usedTools = result.newItems.flatMap((item) => {

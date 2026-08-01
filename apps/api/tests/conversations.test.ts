@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { buildServer, type ResearchService } from "../src/server.js";
+import { ResearchRunConflictError } from "../src/research-service.js";
 
 const servers: Array<ReturnType<typeof buildServer>> = [];
 
@@ -110,6 +111,25 @@ describe("conversational research API", () => {
     expect(resumed.status).toBe(202);
     expect(cancelRun).toHaveBeenCalledWith("run-1", undefined);
     expect(resumeRun).toHaveBeenCalledWith("run-1", undefined);
+  });
+
+  it("returns a controlled conflict while another worker still owns the run lease", async () => {
+    const server = buildServer({
+      logger: false,
+      researchService: {
+        startDomainResearch: vi.fn(),
+        getRun: async () => undefined,
+        cancelRun: async () => undefined,
+        resumeRun: async () => { throw new ResearchRunConflictError("active lease"); },
+      },
+    });
+    servers.push(server);
+    const origin = await server.listen({ host: "127.0.0.1", port: 0 });
+
+    const response = await fetch(`${origin}/api/v1/runs/run-1/resume`, { method: "POST" });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "run_is_active_or_changed" });
   });
 
   it("requires a valid bearer session when an auth service is configured", async () => {

@@ -287,7 +287,8 @@ export class DagScheduler {
           return;
         }
 
-        while (nodeState.attempts <= node.retries) {
+        let attemptsThisExecution = 0;
+        while (attemptsThisExecution <= node.retries) {
           if (checkpoint.executionCount >= this.#workflow.budget.maxNodeExecutions) {
             nodeState.status = "failed";
             nodeState.error = "Workflow node execution budget exhausted";
@@ -298,6 +299,7 @@ export class DagScheduler {
 
           nodeState.status = "running";
           nodeState.attempts += 1;
+          attemptsThisExecution += 1;
           nodeState.toolsUsed = [];
           checkpoint.executionCount += 1;
           await this.#checkpoints.save(checkpoint);
@@ -345,7 +347,7 @@ export class DagScheduler {
           } catch (error) {
             nodeState.error = error instanceof Error ? error.message : String(error);
             nodeState.toolsUsed = [...usedTools];
-            if (nodeState.attempts > node.retries) {
+            if (attemptsThisExecution > node.retries) {
               nodeState.status = "failed";
               checkpoint.status = "failed";
               await this.#checkpoints.save(checkpoint);
