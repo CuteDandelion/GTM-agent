@@ -52,6 +52,8 @@ const selectedTests = process.argv.slice(2);
 const integrationTests = selectedTests.length > 0 ? selectedTests : [
   "tests/supabase-workspace.integration.test.ts",
   "tests/supabase-research-persistence.integration.test.ts",
+  "tests/supabase-interactive-objects.integration.test.ts",
+  "tests/supabase-client-write-boundaries.integration.test.ts",
 ];
 
 const tests = spawnSync(

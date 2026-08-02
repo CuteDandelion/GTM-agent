@@ -50,6 +50,7 @@ export interface WorkflowNodeDefinition {
   id: string;
   dependencies: string[];
   role: NodeRole;
+  concurrencyKey?: string | undefined;
   allowedTools: string[];
   requiredTools: string[];
   retries: number;
@@ -167,7 +168,20 @@ export interface DagSchedulerOptions {
   workflow: WorkflowDefinition;
   checkpoints: CheckpointStore;
   executor: NodeExecutor;
+  retryDelay?: (milliseconds: number) => Promise<void>;
 }
+
+function providerRetryDelayMs(error: unknown): number {
+  const message = error instanceof Error ? error.message : String(error);
+  if (!/\b429\b|rate limit/i.test(message)) return 0;
+  const seconds = message.match(/try again in\s+([0-9]+(?:\.[0-9]+)?)s/i)?.[1];
+  if (!seconds) return 1_000;
+  return Math.min(60_000, Math.max(1_000, Math.ceil(Number(seconds) * 1_000)));
+}
+
+const defaultRetryDelay = (milliseconds: number) => new Promise<void>((resolve) => {
+  setTimeout(resolve, milliseconds);
+});
 
 function initialCheckpoint(runId: string, workflow: WorkflowDefinition): RunCheckpoint {
   return {
@@ -199,12 +213,14 @@ export class DagScheduler {
   readonly #workflow: WorkflowDefinition;
   readonly #checkpoints: CheckpointStore;
   readonly #executor: NodeExecutor;
+  readonly #retryDelay: (milliseconds: number) => Promise<void>;
   readonly #cancelledRuns = new Set<string>();
 
-  constructor({ workflow, checkpoints, executor }: DagSchedulerOptions) {
+  constructor({ workflow, checkpoints, executor, retryDelay = defaultRetryDelay }: DagSchedulerOptions) {
     this.#workflow = defineWorkflow(workflow);
     this.#checkpoints = checkpoints;
     this.#executor = executor;
+    this.#retryDelay = retryDelay;
   }
 
   async cancel(runId: string): Promise<void> {
@@ -274,7 +290,14 @@ export class DagScheduler {
       }
 
       const concurrency = this.#workflow.budget.maxConcurrency ?? 1;
-      const batch = ready.slice(0, concurrency);
+      const occupiedCapacity = new Set<string>();
+      const batch: WorkflowNodeDefinition[] = [];
+      for (const node of ready) {
+        if (batch.length >= concurrency) break;
+        if (node.concurrencyKey && occupiedCapacity.has(node.concurrencyKey)) continue;
+        batch.push(node);
+        if (node.concurrencyKey) occupiedCapacity.add(node.concurrencyKey);
+      }
       const batchStatuses = await Promise.all(batch.map(async (node): Promise<"failed" | "cancelled" | undefined> => {
         const nodeState = checkpoint.nodes[node.id]!;
         const dependencyOutputs = Object.fromEntries(
@@ -355,6 +378,8 @@ export class DagScheduler {
             }
             nodeState.status = "pending";
             await this.#checkpoints.save(checkpoint);
+            const delayMs = providerRetryDelayMs(error);
+            if (delayMs > 0) await this.#retryDelay(delayMs);
           }
         }
       }));
@@ -363,18 +388,81 @@ export class DagScheduler {
   }
 }
 
+const gtmResearchToolContract: Record<string, {
+  allowed?: readonly string[];
+  required?: readonly string[];
+}> = {
+  "research-plan": { required: ["get_seller_profile", "get_icp_definition"] },
+  "crawl-company": { required: ["crawl_company"] },
+  "extract-company": { required: ["fetch_page", "save_evidence"] },
+  "extract-product": { required: ["fetch_page", "save_evidence"] },
+  "extract-hiring": { required: ["fetch_page", "save_evidence"] },
+  "extract-technology": { required: ["fetch_page", "save_evidence"] },
+  "current-research": { required: ["web_search", "save_evidence"] },
+  "document-research": {
+    allowed: ["extract_document_text", "file_search"],
+    required: ["read_document", "save_evidence"],
+  },
+  "normalize-evidence": { required: ["search_evidence", "save_evidence"] },
+  "company-profile": { required: ["search_evidence"] },
+  "icp-assessment": { required: ["search_evidence", "get_icp_definition"] },
+  "opportunity-analysis": { required: ["search_evidence", "get_seller_profile"] },
+  "critical-review": { required: ["get_claim_sources", "web_search"] },
+  "supplemental-plan": { required: ["list_open_hypotheses"] },
+  "supplemental-research": { required: ["web_search", "save_evidence"] },
+  "final-review": { required: ["get_claim_sources", "web_search"] },
+  "synthesis": { required: ["search_evidence", "get_opportunities"] },
+  "portfolio-comparison": {
+    required: ["get_company_profile", "get_opportunities", "compare_companies", "code_interpreter"],
+  },
+  "interactive-objects": { required: ["get_company_profile", "get_opportunities"] },
+};
+
+export function assertGtmResearchToolContract(workflow: WorkflowDefinition): void {
+  const nodesById = new Map(workflow.nodes.map((node) => [node.id, node]));
+  for (const [nodeId, contract] of Object.entries(gtmResearchToolContract)) {
+    const node = nodesById.get(nodeId);
+    if (!node) throw new Error(`GTM research tool contract is missing node ${nodeId}`);
+
+    for (const toolName of contract.allowed ?? []) {
+      if (!node.allowedTools.includes(toolName)) {
+        throw new Error(`GTM research node ${nodeId} must allow tool ${toolName}`);
+      }
+    }
+    for (const toolName of contract.required ?? []) {
+      if (!node.allowedTools.includes(toolName) || !node.requiredTools.includes(toolName)) {
+        throw new Error(`GTM research node ${nodeId} must require tool ${toolName}`);
+      }
+    }
+  }
+}
+
 export function createGtmResearchWorkflow(): WorkflowDefinition {
+  const hasCapability = (input: unknown, capability: string) => {
+    if (typeof input !== "object" || input === null) return true;
+    const plan = (input as { researchPlan?: unknown }).researchPlan;
+    if (typeof plan !== "object" || plan === null) return true;
+    const capabilities = (plan as { capabilities?: unknown }).capabilities;
+    return Array.isArray(capabilities) && capabilities.includes(capability);
+  };
+  const concurrencyKeyForRole = (role: NodeRole) => {
+    if (role === "executor") return "gpt-5.6-luna";
+    if (role === "analyst") return "gpt-5.6-terra";
+    if (role === "planner" || role === "critic" || role === "portfolio") return "gpt-5.6-sol";
+    return undefined;
+  };
   const node = (
     id: string,
     dependencies: string[],
     role: NodeRole,
     allowedTools: string[],
     requiredTools: string[],
-    options: Pick<WorkflowNodeDefinition, "when"> = {},
+    options: Pick<WorkflowNodeDefinition, "when"> & Partial<Pick<WorkflowNodeDefinition, "timeoutMs">> = {},
   ): WorkflowNodeDefinition => ({
     id,
     dependencies,
     role,
+    ...(concurrencyKeyForRole(role) ? { concurrencyKey: concurrencyKeyForRole(role) } : {}),
     allowedTools,
     requiredTools,
     retries: role === "deterministic" ? 1 : 2,
@@ -382,7 +470,7 @@ export function createGtmResearchWorkflow(): WorkflowDefinition {
     ...options,
   });
 
-  return defineWorkflow({
+  const workflow = defineWorkflow({
     id: "company-domain-research-v1",
     budget: { maxNodeExecutions: 32, maxConcurrency: 4 },
     nodes: [
@@ -393,7 +481,14 @@ export function createGtmResearchWorkflow(): WorkflowDefinition {
       node("extract-product", ["crawl-company"], "executor", ["fetch_page", "save_evidence"], ["fetch_page", "save_evidence"]),
       node("extract-hiring", ["crawl-company"], "executor", ["fetch_page", "save_evidence"], ["fetch_page", "save_evidence"]),
       node("extract-technology", ["crawl-company"], "executor", ["fetch_page", "save_evidence"], ["fetch_page", "save_evidence"]),
-      node("current-research", ["research-plan"], "executor", ["web_search", "save_evidence"], ["web_search", "save_evidence"]),
+      node(
+        "current-research",
+        ["research-plan"],
+        "executor",
+        ["web_search", "save_evidence"],
+        ["web_search", "save_evidence"],
+        { when: ({ input }) => hasCapability(input, "current_web") },
+      ),
       node(
         "document-research",
         ["research-plan"],
@@ -401,7 +496,7 @@ export function createGtmResearchWorkflow(): WorkflowDefinition {
         ["read_document", "extract_document_text", "file_search", "save_evidence"],
         ["read_document", "save_evidence"],
         {
-          when: ({ input }) => Boolean(
+          when: ({ input }) => hasCapability(input, "document_research") && Boolean(
             typeof input === "object"
             && input !== null
             && Array.isArray((input as { documentIds?: unknown }).documentIds)
@@ -416,9 +511,30 @@ export function createGtmResearchWorkflow(): WorkflowDefinition {
         ["search_evidence", "save_evidence"],
         ["search_evidence", "save_evidence"],
       ),
-      node("company-profile", ["normalize-evidence"], "analyst", ["search_evidence"], ["search_evidence"]),
-      node("icp-assessment", ["normalize-evidence"], "analyst", ["search_evidence", "get_icp_definition"], ["search_evidence", "get_icp_definition"]),
-      node("opportunity-analysis", ["normalize-evidence"], "analyst", ["search_evidence", "get_seller_profile"], ["search_evidence", "get_seller_profile"]),
+      node(
+        "company-profile",
+        ["normalize-evidence"],
+        "analyst",
+        ["search_evidence"],
+        ["search_evidence"],
+        { when: ({ input }) => hasCapability(input, "company_profile") },
+      ),
+      node(
+        "icp-assessment",
+        ["normalize-evidence"],
+        "analyst",
+        ["search_evidence", "get_icp_definition"],
+        ["search_evidence", "get_icp_definition"],
+        { when: ({ input }) => hasCapability(input, "icp_assessment") },
+      ),
+      node(
+        "opportunity-analysis",
+        ["normalize-evidence"],
+        "analyst",
+        ["search_evidence", "get_seller_profile"],
+        ["search_evidence", "get_seller_profile"],
+        { when: ({ input }) => hasCapability(input, "opportunity_analysis") },
+      ),
       node(
         "critical-review",
         ["company-profile", "icp-assessment", "opportunity-analysis"],
@@ -458,11 +574,29 @@ export function createGtmResearchWorkflow(): WorkflowDefinition {
         "final-review",
         ["critical-review", "supplemental-research"],
         "critic",
-        ["get_claim_sources"],
-        ["get_claim_sources"],
+        ["get_claim_sources", "web_search"],
+        ["get_claim_sources", "web_search"],
+        { timeoutMs: 300_000 },
       ),
       node("synthesis", ["final-review"], "analyst", ["search_evidence", "get_opportunities"], ["search_evidence", "get_opportunities"]),
-      node("interactive-objects", ["synthesis"], "conversation", ["get_company_profile", "get_opportunities"], ["get_company_profile", "get_opportunities"]),
+      node(
+        "portfolio-comparison",
+        ["synthesis"],
+        "portfolio",
+        ["get_company_profile", "get_opportunities", "compare_companies", "code_interpreter"],
+        ["get_company_profile", "get_opportunities", "compare_companies", "code_interpreter"],
+        {
+          when: ({ input }) => hasCapability(input, "portfolio_comparison") && Boolean(
+            typeof input === "object"
+            && input !== null
+            && Array.isArray((input as { domains?: unknown }).domains)
+            && (input as { domains: unknown[] }).domains.length > 1,
+          ),
+        },
+      ),
+      node("interactive-objects", ["synthesis", "portfolio-comparison"], "conversation", ["get_company_profile", "get_opportunities"], ["get_company_profile", "get_opportunities"]),
     ],
   });
+  assertGtmResearchToolContract(workflow);
+  return workflow;
 }

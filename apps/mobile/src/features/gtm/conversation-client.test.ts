@@ -1,4 +1,4 @@
-import { startDomainResearch } from "./conversation-client";
+import { sendConversationTurn, startDomainResearch } from "./conversation-client";
 
 describe("conversation client", () => {
   it("submits a domain-analysis message and returns the queued interactive object", async () => {
@@ -30,6 +30,28 @@ describe("conversation client", () => {
       domains: ["bad"],
       fetcher: fetcher as typeof fetch,
     })).rejects.toThrow(/400/);
+  });
+
+  it("accepts a direct conversational answer with no research run", async () => {
+    const fetcher = jest.fn(async () => new Response(JSON.stringify({
+      kind: "answer",
+      message: "Tell me about your offer or name a company when you are ready.",
+      usedTools: [],
+      interactiveObjects: [],
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+
+    await expect(sendConversationTurn({
+      apiBaseUrl: "https://api.example.com",
+      conversationId: "11111111-1111-4111-8111-111111111111",
+      message: "How should we begin?",
+      domains: [],
+      fetcher: fetcher as typeof fetch,
+    })).resolves.toEqual({
+      kind: "answer",
+      message: "Tell me about your offer or name a company when you are ready.",
+      usedTools: [],
+      interactiveObjects: [],
+    });
   });
 
   it("sends the Supabase access token only in the bearer authorization header", async () => {

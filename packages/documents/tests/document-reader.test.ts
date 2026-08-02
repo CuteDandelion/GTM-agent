@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import JSZip from "jszip";
 
 import { createDocumentReader } from "../src/index.js";
 
@@ -36,6 +37,33 @@ describe("bounded document reader", () => {
       .resolves.toMatchObject({ text: "DOCX evidence" });
     expect(pdf).toHaveBeenCalledOnce();
     expect(docx).toHaveBeenCalledOnce();
+  });
+
+  it("extracts PowerPoint slide text in slide order", async () => {
+    const archive = new JSZip();
+    archive.file("ppt/slides/slide2.xml", "<p:sld><a:t>Second &amp; slide</a:t></p:sld>");
+    archive.file("ppt/slides/slide1.xml", "<p:sld><a:t>First slide</a:t></p:sld>");
+    const bytes = await archive.generateAsync({ type: "uint8array" });
+    const reader = createDocumentReader({ maxBytes: 10_000, maxCharacters: 1_000 });
+
+    await expect(reader.read({
+      bytes,
+      fileName: "pitch.pptx",
+      mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    })).resolves.toMatchObject({ text: "First slide\n\nSecond & slide" });
+  });
+
+  it("rejects a highly compressed PPTX slide before inflating its XML", async () => {
+    const archive = new JSZip();
+    archive.file("ppt/slides/slide1.xml", `<p:sld><a:t>${"A".repeat(200_000)}</a:t></p:sld>`);
+    const bytes = await archive.generateAsync({ type: "uint8array", compression: "DEFLATE" });
+    const reader = createDocumentReader({ maxBytes: 10_000, maxCharacters: 1_000 });
+
+    await expect(reader.read({
+      bytes,
+      fileName: "compressed-bomb.pptx",
+      mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    })).rejects.toThrow(/PPTX.*(expanded|compression).*budget/i);
   });
 
   it("fails closed on unsupported formats and size limits", async () => {

@@ -1,8 +1,153 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createResearchService, InMemoryResearchRunStore } from "../src/research-service.js";
+import { createResearchService, InMemoryResearchRunStore, ResearchAdmissionError } from "../src/research-service.js";
 
 describe("research service", () => {
+  it("bounds sequential research requests per owner and globally until the configured window resets", async () => {
+    let currentTime = 1_000;
+    const jobs: Array<() => Promise<void>> = [];
+    let nextRun = 0;
+    const service = createResearchService({
+      scheduler: { run: async () => ({ status: "completed" }), cancel: vi.fn() },
+      runStore: new InMemoryResearchRunStore(),
+      createRunId: () => `run-window-${++nextRun}`,
+      enqueue: (job) => jobs.push(job),
+      admission: {
+        maxActiveGlobal: 5,
+        maxActivePerOwner: 5,
+        maxRequestsGlobalPerWindow: 2,
+        maxRequestsPerOwnerPerWindow: 1,
+        windowMs: 10_000,
+        now: () => currentTime,
+        retryAfterSeconds: 3,
+      },
+    });
+    const request = (ownerId: string, conversationId: string) => service.startDomainResearch({
+      ownerId,
+      conversationId,
+      message: "Analyze foodbegood.app",
+      domains: ["foodbegood.app"],
+      documentIds: [],
+    });
+
+    await expect(request("owner-1", "11111111-1111-4111-8111-111111111111")).resolves.toBeDefined();
+    await jobs.shift()!();
+    await expect(request("owner-1", "22222222-2222-4222-8222-222222222222")).rejects.toMatchObject({ retryAfterSeconds: 10 });
+    await expect(request("owner-2", "33333333-3333-4333-8333-333333333333")).resolves.toBeDefined();
+    await jobs.shift()!();
+    await expect(request("owner-3", "44444444-4444-4444-8444-444444444444")).rejects.toMatchObject({ retryAfterSeconds: 10 });
+
+    currentTime = 10_999;
+    await expect(request("owner-1", "22222222-2222-4222-8222-222222222222")).rejects.toMatchObject({ retryAfterSeconds: 1 });
+    currentTime = 11_000;
+    await expect(request("owner-1", "22222222-2222-4222-8222-222222222222")).resolves.toBeDefined();
+  });
+
+  it("bounds active research runs per owner and globally before saving or enqueueing", async () => {
+    const jobs: Array<() => Promise<void>> = [];
+    const runIds = ["run-owner-1", "run-rejected-owner-1", "run-owner-2", "run-rejected-global", "run-owner-1-retry"];
+    const runStore = new InMemoryResearchRunStore();
+    const service = createResearchService({
+      scheduler: { run: async () => ({ status: "completed" }), cancel: vi.fn() },
+      runStore,
+      createRunId: () => runIds.shift()!,
+      enqueue: (job) => jobs.push(job),
+      admission: { maxActiveGlobal: 2, maxActivePerOwner: 1, retryAfterSeconds: 7 },
+    });
+    const request = (ownerId: string, conversationId: string) => service.startDomainResearch({
+      ownerId,
+      conversationId,
+      message: "Analyze foodbegood.app",
+      domains: ["foodbegood.app"],
+      documentIds: [],
+    });
+
+    await expect(request("owner-1", "11111111-1111-4111-8111-111111111111")).resolves.toMatchObject({ runId: "run-owner-1" });
+    await expect(request("owner-1", "22222222-2222-4222-8222-222222222222")).rejects.toMatchObject({
+      name: "ResearchAdmissionError",
+      retryAfterSeconds: 7,
+    });
+    await expect(service.getRun("run-rejected-owner-1", "owner-1")).resolves.toBeUndefined();
+    await expect(request("owner-2", "33333333-3333-4333-8333-333333333333")).resolves.toMatchObject({ runId: "run-owner-2" });
+    await expect(request("owner-3", "44444444-4444-4444-8444-444444444444")).rejects.toBeInstanceOf(ResearchAdmissionError);
+    expect(jobs).toHaveLength(2);
+
+    await jobs[0]!();
+    await expect(request("owner-1", "22222222-2222-4222-8222-222222222222")).resolves.toMatchObject({ runId: "run-owner-1-retry" });
+  });
+
+  it("publishes queued, running, and terminal snapshots for mobile projections", async () => {
+    const pending: Array<() => Promise<void>> = [];
+    const published: Array<{ status: string; hasCheckpoint: boolean }> = [];
+    const service = createResearchService({
+      scheduler: {
+        run: async (runId: string) => ({
+          runId,
+          status: "completed" as const,
+          nodes: { synthesis: { status: "completed", attempts: 1, toolsUsed: [] } },
+        }),
+        cancel: vi.fn(),
+      },
+      runStore: new InMemoryResearchRunStore(),
+      createRunId: () => "run-projected-1",
+      enqueue: (job) => pending.push(job),
+      onRunUpdated: async (snapshot) => {
+        published.push({ status: snapshot.status, hasCheckpoint: snapshot.checkpoint !== undefined });
+      },
+    });
+
+    await service.startDomainResearch({
+      ownerId: "11111111-1111-4111-8111-111111111111",
+      conversationId: "22222222-2222-4222-8222-222222222222",
+      message: "Analyze foodbegood.app",
+      domains: ["foodbegood.app"],
+      documentIds: [],
+    });
+    await pending[0]!();
+
+    expect(published).toEqual([
+      { status: "queued", hasCheckpoint: false },
+      { status: "running", hasCheckpoint: false },
+      { status: "completed", hasCheckpoint: true },
+    ]);
+  });
+
+  it("runs prompts FIFO within one conversation while allowing another conversation to run", async () => {
+    const jobs: Array<() => Promise<void>> = [];
+    const runIds = ["run-first", "run-second", "run-other"];
+    let releaseFirst!: () => void;
+    const firstBlocked = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const run = vi.fn(async (runId: string) => {
+      if (runId === "run-first") await firstBlocked;
+      return { runId, status: "completed" as const };
+    });
+    const service = createResearchService({
+      scheduler: { run, cancel: vi.fn() },
+      runStore: new InMemoryResearchRunStore(),
+      createRunId: () => runIds.shift()!,
+      enqueue: (job) => jobs.push(job),
+    });
+
+    const sameConversation = "11111111-1111-4111-8111-111111111111";
+    await service.startDomainResearch({ conversationId: sameConversation, message: "Analyze first.example", domains: ["first.example"], documentIds: [] });
+    await service.startDomainResearch({ conversationId: sameConversation, message: "Now compare second.example", domains: ["second.example"], documentIds: [] });
+    await service.startDomainResearch({ conversationId: "22222222-2222-4222-8222-222222222222", message: "Analyze other.example", domains: ["other.example"], documentIds: [] });
+
+    expect(jobs).toHaveLength(2);
+    const firstJob = jobs[0]!();
+    const otherJob = jobs[1]!();
+    await otherJob;
+    expect(run).toHaveBeenCalledWith("run-other", expect.anything());
+    expect(run).not.toHaveBeenCalledWith("run-second", expect.anything());
+    await expect(service.getRun("run-second")).resolves.toMatchObject({ status: "queued" });
+
+    releaseFirst();
+    await firstJob;
+    expect(jobs).toHaveLength(3);
+    await jobs[2]!();
+    expect(run.mock.calls.map(([runId]) => runId)).toEqual(["run-first", "run-other", "run-second"]);
+  });
+
   it("queues a conversational request, executes the DAG, and exposes its checkpoint", async () => {
     const run = vi.fn(async (runId: string) => ({
       runId,
@@ -210,6 +355,7 @@ describe("research service", () => {
     let requested = false;
     const runStore = {
       load: (runId: string) => baseStore.load(runId),
+      listForConversation: (conversationId: string) => baseStore.listForConversation(conversationId),
       async save(snapshot: Parameters<InMemoryResearchRunStore["save"]>[0]) {
         await baseStore.save(snapshot);
         if (snapshot.status === "failed" && !requested) {

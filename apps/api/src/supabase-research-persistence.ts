@@ -147,6 +147,27 @@ export function createSupabaseResearchPersistence(
       runOwners.set(runId, row.owner_id);
       return mapRun(row, await loadCheckpoint(runId));
     },
+    async listForConversation(conversationId) {
+      const result = await client.from("workflow_runs")
+        .select(workflowRunColumns)
+        .eq("conversation_id", conversationId)
+        .order("created_at", { ascending: true });
+      if (result.error) throw new Error(`Unable to list conversation research runs: ${result.error.message}`);
+      return Promise.all((result.data as WorkflowRunRow[]).map(async (row) => {
+        runOwners.set(row.id, row.owner_id);
+        return mapRun(row, await loadCheckpoint(row.id));
+      }));
+    },
+    async claimNextForConversation(conversationId, updatedAt) {
+      const result = await client.rpc("claim_next_conversation_workflow_run", {
+        p_conversation_id: conversationId,
+        p_worker_lease_id: workerLeaseId,
+        p_updated_at: updatedAt,
+      });
+      if (result.error) throw new Error(`Unable to claim the next conversation research run: ${result.error.message}`);
+      if (!result.data) return undefined;
+      return runStore.load(String(result.data));
+    },
     async save(snapshot) {
       const ownerId = snapshot.input.ownerId;
       if (!ownerId) throw new Error("Durable research runs require an authenticated owner");

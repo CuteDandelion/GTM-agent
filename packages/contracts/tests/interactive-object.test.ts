@@ -40,7 +40,7 @@ describe("interactive object contract", () => {
     expect(() => parseInteractiveObject(unsafeObject)).toThrow();
   });
 
-  it("supports exactly the six trusted mobile object families", async () => {
+  it("supports the trusted mobile object families including agent-authored interaction prompts", async () => {
     const contracts = await loadContracts();
     expect(Reflect.get(contracts, "interactiveObjectTypes")).toEqual([
       "workflow_progress",
@@ -49,6 +49,7 @@ describe("interactive object contract", () => {
       "opportunity",
       "evidence_collection",
       "company_comparison",
+      "interaction_prompt",
     ]);
 
     const parseInteractiveObject = Reflect.get(contracts, "parseInteractiveObject");
@@ -60,7 +61,40 @@ describe("interactive object contract", () => {
       { ...base, type: "opportunity", company: "Acme", title: "Support triage", summary: "Automate routing", impact: "high", value: "high", effort: "medium", fit: "high", status: "research" },
       { ...base, type: "evidence_collection", title: "Evidence", subtitle: "Sources", items: [{ id: "e-1", title: "Homepage", url: "https://acme.ai", excerpt: "Support automation", classification: "fact", confidence: 4 }] },
       { ...base, type: "company_comparison", title: "Target ranking", entries: [{ company: "Acme", domain: "acme.ai", rank: 1, score: 82, status: "pursue", rationale: "Best fit" }] },
+      {
+        ...base,
+        type: "interaction_prompt",
+        purpose: "clarification",
+        title: "Choose the comparison lens",
+        prompt: "What matters most for this shortlist?",
+        selection: "single",
+        options: [
+          { id: "fastest-win", label: "Fastest win", description: "Prefer low-effort automation opportunities." },
+          { id: "largest-value", label: "Largest value", description: "Prefer strategic upside over speed." },
+        ],
+        allowFreeText: true,
+      },
     ];
     for (const object of objects) expect(parseInteractiveObject(object)).toEqual(object);
+  });
+
+  it("keeps failed batch targets explicit without assigning them a fabricated rank", async () => {
+    const contracts = await loadContracts();
+    const parseInteractiveObject = Reflect.get(contracts, "parseInteractiveObject");
+    const comparison = {
+      id: "comparison-1",
+      conversationId: "conversation-1",
+      version: 1,
+      type: "company_comparison",
+      title: "Target ranking",
+      entries: [
+        { company: "Alpha", domain: "alpha.example", rank: 1, score: 82, status: "pursue", rationale: "Strongest supported fit" },
+      ],
+      failures: [
+        { domain: "broken.example", reason: "forced crawl failure" },
+      ],
+    };
+
+    expect(parseInteractiveObject(comparison)).toEqual(comparison);
   });
 });

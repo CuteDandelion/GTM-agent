@@ -122,6 +122,16 @@ export function createSupabaseWorkspaceService(client: SupabaseClient): Workspac
       if (result.error) throw new Error(`Unable to create conversation: ${result.error.message}`);
       return mapConversation(result.data as ConversationRow);
     },
+    async listConversations(ownerId) {
+      const result = await client
+        .from("conversations")
+        .select(conversationColumns)
+        .eq("owner_id", ownerId)
+        .eq("status", "active")
+        .order("updated_at", { ascending: false });
+      if (result.error) throw new Error(`Unable to list conversations: ${result.error.message}`);
+      return (result.data as ConversationRow[]).map(mapConversation);
+    },
     async getConversation(ownerId, conversationId) {
       const result = await client
         .from("conversations")

@@ -13,6 +13,70 @@ describe("Supabase research persistence", () => {
   });
 
   it.runIf(process.env.GTM_SUPABASE_INTEGRATION === "1")(
+    "atomically claims prompts FIFO per conversation across worker processes",
+    async () => {
+      const { createSupabaseResearchPersistence } = await import("../src/supabase-research-persistence.js");
+      const admin = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SECRET_KEY!, {
+        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      });
+      const userResult = await admin.auth.admin.createUser({
+        email: `gtm-queue-owner-${randomUUID()}@example.test`,
+        password: `Owner-${randomUUID()}`,
+        email_confirm: true,
+      });
+      expect(userResult.error).toBeNull();
+      const owner = userResult.data.user!;
+      const conversationResult = await admin.from("conversations").insert({
+        owner_id: owner.id,
+        title: "FIFO queue integration",
+      }).select("id").single();
+      expect(conversationResult.error).toBeNull();
+      const conversationId = String(conversationResult.data!.id);
+      const [firstRunId, secondRunId] = [randomUUID(), randomUUID()];
+      const creator = createSupabaseResearchPersistence(admin);
+
+      try {
+        for (const [runId, createdAt] of [
+          [firstRunId, "2026-08-02T10:00:00.000Z"],
+          [secondRunId, "2026-08-02T10:00:01.000Z"],
+        ] as const) {
+          await creator.runStore.save({
+            runId,
+            conversationId,
+            status: "queued",
+            input: { ownerId: owner.id, conversationId, message: `Analyze ${runId}.example`, domains: [`${runId}.example`], documentIds: [] },
+            createdAt,
+            updatedAt: createdAt,
+          });
+        }
+
+        const workers = [createSupabaseResearchPersistence(admin), createSupabaseResearchPersistence(admin)] as const;
+        const claims = await Promise.all(workers.map((worker) => worker.runStore.claimNextForConversation!(
+          conversationId,
+          "2026-08-02T10:00:02.000Z",
+        )));
+        expect(claims.filter(Boolean)).toHaveLength(1);
+        expect(claims.find(Boolean)).toMatchObject({ runId: firstRunId, status: "running" });
+
+        const winnerIndex = claims.findIndex(Boolean);
+        const first = claims[winnerIndex]!;
+        await workers[winnerIndex]!.runStore.save({
+          ...first,
+          status: "completed",
+          updatedAt: "2026-08-02T10:00:03.000Z",
+        });
+        await expect(createSupabaseResearchPersistence(admin).runStore.claimNextForConversation!(
+          conversationId,
+          "2026-08-02T10:00:04.000Z",
+        )).resolves.toMatchObject({ runId: secondRunId, status: "running" });
+      } finally {
+        await admin.auth.admin.deleteUser(owner.id);
+      }
+    },
+    20_000,
+  );
+
+  it.runIf(process.env.GTM_SUPABASE_INTEGRATION === "1")(
     "preserves the last DAG checkpoint when a later failed-run update omits it",
     async () => {
       const module = await import("../src/supabase-research-persistence.js");

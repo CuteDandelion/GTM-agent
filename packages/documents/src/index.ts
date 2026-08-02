@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import JSZip from "jszip";
 import mammoth from "mammoth";
 import { extractText, getDocumentProxy } from "unpdf";
 
@@ -23,6 +24,7 @@ export interface ExtractedDocument {
 }
 
 const docxMime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const pptxMime = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 const textMimes = new Set([
   "text/plain",
   "text/markdown",
@@ -61,15 +63,77 @@ const defaultDocxExtractor: BinaryTextExtractor = async (bytes) => {
   return result.value;
 };
 
+type SizedZipEntry = JSZip.JSZipObject & {
+  _data?: { compressedSize?: number; uncompressedSize?: number };
+};
+
+function createDefaultPptxExtractor(options: { maxBytes: number; maxCharacters: number }): BinaryTextExtractor {
+  const maxExpandedBytes = Math.min(
+    16 * 1024 * 1024,
+    Math.max(options.maxBytes * 4, options.maxCharacters * 8),
+  );
+  const maxEntryBytes = Math.min(2 * 1024 * 1024, maxExpandedBytes);
+  const maxCompressionRatio = 100;
+  const maxExtractionMs = 5_000;
+
+  return async (bytes) => {
+    const archive = await JSZip.loadAsync(bytes);
+    const slides = Object.values(archive.files)
+      .filter((entry) => !entry.dir && /^ppt\/slides\/slide\d+\.xml$/i.test(entry.name))
+      .sort((left, right) => {
+        const leftNumber = Number(left.name.match(/slide(\d+)\.xml$/i)?.[1] ?? 0);
+        const rightNumber = Number(right.name.match(/slide(\d+)\.xml$/i)?.[1] ?? 0);
+        return leftNumber - rightNumber;
+      });
+    if (slides.length > 500) throw new Error("PPTX exceeded its slide limit");
+    let expandedBytes = 0;
+    for (const slide of slides as SizedZipEntry[]) {
+      const compressedSize = slide._data?.compressedSize;
+      const uncompressedSize = slide._data?.uncompressedSize;
+      if (!Number.isFinite(compressedSize) || !Number.isFinite(uncompressedSize)) {
+        throw new Error("PPTX entry size metadata is unavailable");
+      }
+      if (uncompressedSize! > maxEntryBytes) throw new Error("PPTX expanded entry exceeded its byte budget");
+      expandedBytes += uncompressedSize!;
+      if (expandedBytes > maxExpandedBytes) throw new Error("PPTX expanded content exceeded its byte budget");
+      if (uncompressedSize! / Math.max(1, compressedSize!) > maxCompressionRatio) {
+        throw new Error("PPTX compression ratio exceeded its budget");
+      }
+    }
+
+    const deadline = Date.now() + maxExtractionMs;
+    const slideTexts: string[] = [];
+    for (const slide of slides) {
+      const xml = await slide.async("string", () => {
+        if (Date.now() > deadline) throw new Error("PPTX extraction exceeded its time budget");
+      });
+      if (Date.now() > deadline) throw new Error("PPTX extraction exceeded its time budget");
+      let depth = 0;
+      for (const tag of xml.matchAll(/<\/?[A-Za-z][^>]*>/g)) {
+        if (tag[0].startsWith("</")) depth -= 1;
+        else if (!tag[0].endsWith("/>")) depth += 1;
+        if (depth > 128 || depth < 0) throw new Error("PPTX XML depth exceeded its budget");
+      }
+      if (depth !== 0) throw new Error("PPTX XML structure is invalid");
+      slideTexts.push([...xml.matchAll(/<a:t(?:\s[^>]*)?>([\s\S]*?)<\/a:t>/gi)]
+        .map((match) => stripHtml(match[1] ?? ""))
+        .join(" "));
+    }
+    return slideTexts.join("\n\n");
+  };
+}
+
 export function createDocumentReader(options: {
   maxBytes: number;
   maxCharacters: number;
   extractPdf?: BinaryTextExtractor;
   extractDocx?: BinaryTextExtractor;
+  extractPptx?: BinaryTextExtractor;
 }) {
   if (options.maxBytes < 1 || options.maxCharacters < 1) throw new Error("Document budgets must be positive");
   const extractPdf = options.extractPdf ?? defaultPdfExtractor;
   const extractDocx = options.extractDocx ?? defaultDocxExtractor;
+  const extractPptx = options.extractPptx ?? createDefaultPptxExtractor(options);
 
   return {
     async read(input: DocumentInput): Promise<ExtractedDocument> {
@@ -85,6 +149,8 @@ export function createDocumentReader(options: {
         text = await extractPdf(input.bytes);
       } else if (mimeType === docxMime) {
         text = await extractDocx(input.bytes);
+      } else if (mimeType === pptxMime) {
+        text = await extractPptx(input.bytes);
       } else {
         throw new Error(`Unsupported document type: ${mimeType || "unknown"}`);
       }

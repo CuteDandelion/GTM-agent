@@ -1,10 +1,12 @@
 import { buildServer } from "./server.js";
-import { createApplicationResearchService } from "./bootstrap.js";
+import { createApplicationConversationAgent, createApplicationResearchService } from "./bootstrap.js";
 import { createEnvironmentAuthService } from "./supabase-auth.js";
 import { InMemoryInteractiveObjectService } from "./interactive-actions.js";
+import { createEnvironmentInteractiveObjectService } from "./supabase-interactive-objects.js";
 import { createEnvironmentWorkspaceService } from "./supabase-workspace.js";
 
 const workspaceService = createEnvironmentWorkspaceService();
+const interactiveObjectService = createEnvironmentInteractiveObjectService() ?? new InMemoryInteractiveObjectService();
 const requiredEnvironment = [
   "OPENAI_API_KEY",
   "SUPABASE_URL",
@@ -13,9 +15,10 @@ const requiredEnvironment = [
 ] as const;
 const configurationReady = requiredEnvironment.every((key) => Boolean(process.env[key]?.trim()));
 const server = buildServer({
-  researchService: createApplicationResearchService(),
+  conversationAgent: createApplicationConversationAgent(),
+  researchService: createApplicationResearchService({ interactiveObjectService }),
   authService: createEnvironmentAuthService(),
-  objectActionService: new InMemoryInteractiveObjectService(),
+  objectActionService: interactiveObjectService,
   ...(workspaceService ? { workspaceService } : {}),
   configurationReady,
 });

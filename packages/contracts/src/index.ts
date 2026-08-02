@@ -131,6 +131,25 @@ export const companyComparisonObjectSchema = z.object({
     status: z.enum(["pursue", "research", "nurture", "reject"]),
     rationale: z.string().min(1),
   }).strict()).min(1),
+  failures: z.array(z.object({
+    domain: z.string().min(1),
+    reason: z.string().min(1),
+  }).strict()).optional(),
+}).strict();
+
+export const interactionPromptObjectSchema = z.object({
+  ...interactiveObjectBase,
+  type: z.literal("interaction_prompt"),
+  purpose: z.enum(["clarification", "scope", "assumption", "evidence_request", "approval", "next_step"]),
+  title: z.string().min(1),
+  prompt: z.string().min(1),
+  selection: z.enum(["single", "multiple", "confirmation"]),
+  options: z.array(z.object({
+    id: z.string().min(1),
+    label: z.string().min(1),
+    description: z.string().min(1).optional(),
+  }).strict()).min(1).max(8),
+  allowFreeText: z.boolean(),
 }).strict();
 
 export const interactiveObjectTypes = [
@@ -140,6 +159,7 @@ export const interactiveObjectTypes = [
   "opportunity",
   "evidence_collection",
   "company_comparison",
+  "interaction_prompt",
 ] as const;
 
 export const interactiveObjectSchema = z.discriminatedUnion("type", [
@@ -149,6 +169,7 @@ export const interactiveObjectSchema = z.discriminatedUnion("type", [
   opportunityObjectSchema,
   evidenceCollectionObjectSchema,
   companyComparisonObjectSchema,
+  interactionPromptObjectSchema,
 ]);
 
 export const canonicalAcmeFixtureBundleSchema = z
@@ -166,6 +187,7 @@ export type CompanyProfileObject = z.infer<typeof companyProfileObjectSchema>;
 export type IcpScoreObject = z.infer<typeof icpScoreObjectSchema>;
 export type OpportunityObject = z.infer<typeof opportunityObjectSchema>;
 export type CompanyComparisonObject = z.infer<typeof companyComparisonObjectSchema>;
+export type InteractionPromptObject = z.infer<typeof interactionPromptObjectSchema>;
 export type InteractiveObject = z.infer<typeof interactiveObjectSchema>;
 export type CanonicalAcmeFixtureBundle = z.infer<typeof canonicalAcmeFixtureBundleSchema>;
 
@@ -178,12 +200,10 @@ export const canonicalAcmeFixtures = {
     title: "Researching Acme",
     live: true,
     steps: [
-      { id: "plan", label: "Research plan", agent: "Sol", status: "completed" },
-      { id: "crawl", label: "Website crawl", agent: "System", status: "completed" },
-      { id: "extract", label: "Evidence extraction", agent: "Luna", status: "completed" },
-      { id: "analyze", label: "ICP and opportunity analysis", agent: "Terra", status: "running" },
-      { id: "review", label: "Critical review", agent: "Sol", status: "pending" },
-      { id: "synthesis", label: "GTM synthesis", agent: "Terra", status: "pending" }
+      { id: "plan", label: "Plan", agent: "Sol", status: "completed" },
+      { id: "research", label: "Research", agent: "Luna", status: "running" },
+      { id: "analyze", label: "Analyze", agent: "Terra", status: "pending" },
+      { id: "review", label: "Review", agent: "Sol", status: "pending" }
     ]
   },
   assessment: {

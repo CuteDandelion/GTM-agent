@@ -1,9 +1,34 @@
 import { describe, expect, it, vi } from "vitest";
 import { RunContext } from "@openai/agents";
 
-import { createFunctionToolAdapters, extractToolRunContext } from "../src/index.js";
+import { createFunctionToolAdapters, extractToolRunContext, gtmNodeOutputType, normalizeProviderToolName, selectAvailableToolNames } from "../src/index.js";
 
 describe("OpenAI function tool adapters", () => {
+  it("forces provider output into a JSON object without constraining node-specific fields", () => {
+    expect(gtmNodeOutputType).toEqual({
+      type: "json_schema",
+      name: "gtm_node_output",
+      strict: false,
+      schema: { type: "object", properties: {}, required: [], additionalProperties: true },
+    });
+  });
+
+  it("normalizes hosted provider call names to DAG policy names", () => {
+    expect(normalizeProviderToolName("web_search_call")).toBe("web_search");
+    expect(normalizeProviderToolName("file_search_call")).toBe("file_search");
+    expect(normalizeProviderToolName("code_interpreter_call")).toBe("code_interpreter");
+    expect(normalizeProviderToolName("save_evidence")).toBe("save_evidence");
+  });
+
+  it("omits unavailable optional file search without hiding a required capability", () => {
+    expect(selectAvailableToolNames(["read_document", "file_search"], [], ["read_document"]))
+      .toEqual(["read_document"]);
+    expect(() => selectAvailableToolNames(["file_search"], [], ["file_search"]))
+      .toThrow("file_search requires at least one configured vector store");
+    expect(selectAvailableToolNames(["file_search"], ["vs_1"], ["file_search"]))
+      .toEqual(["file_search"]);
+  });
+
   it("keeps tool names explicit and passes structured input to the handler", async () => {
     const handler = vi.fn(async (...[input]: unknown[]) => ({ saved: input }));
     const adapters = createFunctionToolAdapters({
@@ -13,7 +38,17 @@ describe("OpenAI function tool adapters", () => {
       },
     });
 
-    expect(adapters.save_evidence).toMatchObject({ type: "function", name: "save_evidence", strict: true });
+    expect(adapters.save_evidence).toMatchObject({
+      type: "function",
+      name: "save_evidence",
+      strict: false,
+      parameters: {
+        type: "object",
+        properties: { input: { type: "object", additionalProperties: true } },
+        required: ["input"],
+        additionalProperties: true,
+      },
+    });
     const result = await adapters.save_evidence!.invoke({} as never, JSON.stringify({ input: { title: "Acme" } }));
     expect(handler).toHaveBeenCalledWith({ title: "Acme" });
     expect(result).toBe(JSON.stringify({ saved: { title: "Acme" } }));

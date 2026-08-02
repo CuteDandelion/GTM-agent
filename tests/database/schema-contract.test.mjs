@@ -62,3 +62,20 @@ test("the migration creates private buckets and owner-scoped policies", async ()
   assert.doesNotMatch(sql, /auth\.role\(\)/i);
   assert.doesNotMatch(sql, /raw_user_meta_data|user_metadata/i);
 });
+
+test("conversation workflow prompts have a service-only atomic FIFO claim function", async () => {
+  const files = await readdir(new URL("../../supabase/migrations/", import.meta.url));
+  const migrationFile = files.find((file) => file.endsWith("_conversation_workflow_queue.sql"));
+  assert.ok(migrationFile, "expected a conversation_workflow_queue migration");
+  const sql = await readFile(
+    new URL(`../../supabase/migrations/${migrationFile}`, import.meta.url),
+    "utf8",
+  );
+
+  assert.match(sql, /create or replace function public\.claim_next_conversation_workflow_run/i);
+  assert.match(sql, /pg_advisory_xact_lock/i);
+  assert.match(sql, /status\s*=\s*'queued'[\s\S]*order by\s+created_at\s+asc/i);
+  assert.match(sql, /not exists[\s\S]*status\s*=\s*'running'/i);
+  assert.match(sql, /revoke all on function public\.claim_next_conversation_workflow_run[\s\S]*from public, anon, authenticated/i);
+  assert.match(sql, /grant execute on function public\.claim_next_conversation_workflow_run[\s\S]*to service_role/i);
+});

@@ -1,8 +1,87 @@
 import { createHash } from "node:crypto";
-import { isIP } from "node:net";
+import { request as requestHttp } from "node:http";
+import { request as requestHttps } from "node:https";
+import { isIP, type LookupFunction } from "node:net";
+import { Readable } from "node:stream";
 
 export type ResolveHost = (hostname: string) => Promise<string[]>;
-export type Fetcher = (url: URL, init?: RequestInit) => Promise<Response>;
+export interface ValidatedConnection {
+  validatedAddresses: string[];
+}
+export type Fetcher = (
+  url: URL,
+  init?: RequestInit,
+  connection?: ValidatedConnection,
+) => Promise<Response>;
+
+function responseHeaders(headers: import("node:http").IncomingHttpHeaders): Headers {
+  const result = new Headers();
+  for (const [name, value] of Object.entries(headers)) {
+    if (Array.isArray(value)) {
+      for (const item of value) result.append(name, item);
+    } else if (value !== undefined) {
+      result.set(name, value);
+    }
+  }
+  return result;
+}
+
+export function createPinnedNodeFetcher(): Fetcher {
+  return async (url, init, connection) => {
+    const validatedAddresses = connection?.validatedAddresses ?? [];
+    if (validatedAddresses.length === 0) throw new Error("Pinned fetch requires a validated address");
+    const headers = new Headers(init?.headers);
+    if (!headers.has("accept")) headers.set("accept", "text/html,application/xhtml+xml");
+    if (!headers.has("accept-encoding")) headers.set("accept-encoding", "identity");
+    if (!headers.has("user-agent")) headers.set("user-agent", "GTMResearchCrawler/0.1");
+
+    let lastError: unknown;
+    for (const pinnedAddress of validatedAddresses) {
+      try {
+        return await new Promise<Response>((resolve, reject) => {
+          const family = isIP(pinnedAddress);
+          if (family === 0) {
+            reject(new Error("Pinned fetch received an invalid IP address"));
+            return;
+          }
+          const lookup = ((_hostname: string, lookupOptions: { all?: boolean } | number, callback: (...args: unknown[]) => void) => {
+            if (typeof lookupOptions === "object" && lookupOptions.all) {
+              callback(null, [{ address: pinnedAddress, family }]);
+              return;
+            }
+            callback(null, pinnedAddress, family);
+          }) as LookupFunction;
+          const request = (url.protocol === "https:" ? requestHttps : requestHttp)(url, {
+            method: init?.method ?? "GET",
+            headers: Object.fromEntries(headers.entries()),
+            lookup,
+            ...(url.protocol === "https:" ? { servername: url.hostname } : {}),
+          }, (incoming) => {
+            const status = incoming.statusCode ?? 502;
+            const bodyless = status === 101 || status === 204 || status === 205 || status === 304;
+            const body = bodyless
+              ? null
+              : Readable.toWeb(incoming) as ReadableStream<Uint8Array>;
+            resolve(new Response(body, {
+              status,
+              ...(incoming.statusMessage ? { statusText: incoming.statusMessage } : {}),
+              headers: responseHeaders(incoming.headers),
+            }));
+          });
+          request.once("error", reject);
+          if (init?.signal) {
+            if (init.signal.aborted) request.destroy(init.signal.reason);
+            else init.signal.addEventListener("abort", () => request.destroy(init.signal?.reason), { once: true });
+          }
+          request.end();
+        });
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error("Pinned fetch failed");
+  };
+}
 
 function isUnsafeIpv4(address: string): boolean {
   const parts = address.split(".").map(Number);
@@ -33,7 +112,10 @@ function isPublicAddress(address: string): boolean {
   return false;
 }
 
-export async function validatePublicUrl(input: string, resolveHost: ResolveHost): Promise<URL> {
+async function validatePublicUrlAndAddresses(
+  input: string,
+  resolveHost: ResolveHost,
+): Promise<{ url: URL; addresses: string[] }> {
   const withProtocol = /^[a-z][a-z\d+.-]*:\/\//i.test(input) ? input : `https://${input}`;
   let url: URL;
   try {
@@ -56,7 +138,35 @@ export async function validatePublicUrl(input: string, resolveHost: ResolveHost)
     throw new Error("Hostname must resolve only to public addresses");
   }
   url.hash = "";
-  return url;
+  return { url, addresses };
+}
+
+export async function validatePublicUrl(input: string, resolveHost: ResolveHost): Promise<URL> {
+  return (await validatePublicUrlAndAddresses(input, resolveHost)).url;
+}
+
+async function readBodyWithinLimit(response: Response, maxBytes: number): Promise<string> {
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    byteLength += value.byteLength;
+    if (byteLength > maxBytes) {
+      await reader.cancel("Crawler page exceeded its byte budget");
+      throw new Error("Crawler page exceeded its byte budget");
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
 }
 
 function extractLinks(html: string, baseUrl: URL): URL[] {
@@ -95,6 +205,7 @@ export interface CrawledPage {
   title?: string;
   text: string;
   contentHash: string;
+  textTruncated?: boolean;
   observedAt: string;
   trust: "untrusted_external";
 }
@@ -104,17 +215,24 @@ export function createSafeCrawler(options: {
   fetcher: Fetcher;
   maxPages: number;
   maxBytesPerPage: number;
+  maxTextCharactersPerPage?: number;
 }) {
-  if (options.maxPages < 1 || options.maxBytesPerPage < 1) throw new Error("Crawler budgets must be positive");
+  const maxTextCharactersPerPage = options.maxTextCharactersPerPage ?? 20_000;
+  if (options.maxPages < 1 || options.maxBytesPerPage < 1 || maxTextCharactersPerPage < 1) throw new Error("Crawler budgets must be positive");
 
   const fetchValidated = async (url: URL, root: URL): Promise<{ response: Response; finalUrl: URL }> => {
     let current = url;
     for (let redirect = 0; redirect <= 3; redirect += 1) {
-      current = await validatePublicUrl(current.toString(), options.resolveHost);
+      const validated = await validatePublicUrlAndAddresses(current.toString(), options.resolveHost);
+      current = validated.url;
       if (current.hostname !== root.hostname || current.protocol !== root.protocol || current.port !== root.port) {
         throw new Error("Crawler redirect left the validated company origin");
       }
-      const response = await options.fetcher(current, { redirect: "manual" });
+      const response = await options.fetcher(
+        current,
+        { redirect: "manual" },
+        { validatedAddresses: validated.addresses },
+      );
       if (response.status < 300 || response.status >= 400) return { response, finalUrl: current };
       const location = response.headers.get("location");
       if (!location) throw new Error("Redirect response is missing a location");
@@ -140,17 +258,17 @@ export function createSafeCrawler(options: {
         if (Number.isFinite(declaredLength) && declaredLength > options.maxBytesPerPage) {
           throw new Error("Crawler page exceeded its byte budget");
         }
-        const html = await response.text();
-        if (new TextEncoder().encode(html).byteLength > options.maxBytesPerPage) {
-          throw new Error("Crawler page exceeded its byte budget");
-        }
+        const html = await readBodyWithinLimit(response, options.maxBytesPerPage);
 
         const title = html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/\s+/g, " ").trim();
-        const text = extractText(html);
+        const extractedText = extractText(html);
+        const textTruncated = extractedText.length > maxTextCharactersPerPage;
+        const text = extractedText.slice(0, maxTextCharactersPerPage);
         pages.push({
           url: finalUrl.toString(),
           ...(title ? { title } : {}),
           text,
+          ...(textTruncated ? { textTruncated: true } : {}),
           contentHash: `sha256:${createHash("sha256").update(html).digest("hex")}`,
           observedAt: new Date().toISOString(),
           trust: "untrusted_external",
