@@ -14,6 +14,7 @@ final class GTMResearchAgentUITests: XCTestCase {
     try XCTSkipUnless(mode == "provider", "Set NATIVE_E2E_MODE=provider for the paid provider journey")
     let email = try XCTUnwrap(environment["NATIVE_E2E_EMAIL"], "NATIVE_E2E_EMAIL is required")
     let password = try XCTUnwrap(environment["NATIVE_E2E_PASSWORD"], "NATIVE_E2E_PASSWORD is required")
+    let replayExistingConversation = environment["NATIVE_E2E_REPLAY_EXISTING"] == "1"
     let researchPrompt = "Profile foodbegood.app for AI and agent automation sales fit. Use current web evidence. Focus on company profile, ICP fit, and one evidence-backed opportunity."
     let queuedFollowUp = "Continue researching the same company and rank which workflow I should discuss first."
 
@@ -30,7 +31,10 @@ final class GTMResearchAgentUITests: XCTestCase {
       }
     }
 
-    if !labeledElement(researchPrompt).waitForExistence(timeout: 5) {
+    if replayExistingConversation {
+      XCTAssertTrue(labeledElement(researchPrompt).waitForExistence(timeout: 30), "Replay mode requires the persisted provider prompt")
+      XCTAssertTrue(labeledElement(queuedFollowUp).waitForExistence(timeout: 30), "Replay mode requires the persisted queued follow-up")
+    } else {
       XCTAssertTrue(app.staticTexts["Start a new GTM conversation"].waitForExistence(timeout: 30), "A fresh provider journey must begin from an empty conversation")
 
       send(researchPrompt)
@@ -45,18 +49,18 @@ final class GTMResearchAgentUITests: XCTestCase {
       XCTAssertTrue(app.staticTexts["Queued · position 2"].waitForExistence(timeout: 60), "The follow-up must enter the durable FIFO behind the active run")
     }
 
-    XCTAssertTrue(app.buttons["Evidence"].waitForExistence(timeout: 600), "Expected provider-authored evidence interactive objects")
-    XCTAssertTrue(app.buttons["Shortlist"].waitForExistence(timeout: 30), "Expected a provider-authored opportunity interactive object")
+    XCTAssertTrue(reveal(app.buttons["Evidence"], timeout: 600), "Expected provider-authored evidence interactive objects")
     app.buttons["Evidence"].tap()
     XCTAssertTrue(app.buttons["Close evidence"].waitForExistence(timeout: 15), "Provider evidence must be inspectable")
     app.buttons["Close evidence"].tap()
+    XCTAssertTrue(reveal(app.buttons["Shortlist"], timeout: 30), "Expected a provider-authored opportunity interactive object")
 
     app.terminate()
     app.launch()
 
     XCTAssertTrue(labeledElement(researchPrompt).waitForExistence(timeout: 45), "Conversation must persist across an app relaunch")
     XCTAssertTrue(labeledElement(queuedFollowUp).waitForExistence(timeout: 45), "The queued follow-up must persist across an app relaunch")
-    XCTAssertTrue(app.buttons["Evidence"].waitForExistence(timeout: 45), "Dynamic interactive objects must persist across an app relaunch")
+    XCTAssertTrue(reveal(app.buttons["Evidence"], timeout: 45), "Dynamic interactive objects must persist across an app relaunch")
   }
 
   func testLocalOnboardingQueueActionFailureAndRelaunchJourney() throws {
@@ -150,6 +154,26 @@ final class GTMResearchAgentUITests: XCTestCase {
     while Date() < deadline {
       if elements.contains(where: { $0.exists }) { return true }
       RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+    }
+    return false
+  }
+
+  private func reveal(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+    guard element.waitForExistence(timeout: timeout) else { return false }
+    if element.isHittable { return true }
+
+    let conversation = app.scrollViews.firstMatch
+    for swipeUp in [true, false] {
+      for _ in 0..<16 {
+        if element.isHittable { return true }
+        if conversation.exists {
+          if swipeUp { conversation.swipeUp() } else { conversation.swipeDown() }
+        } else {
+          if swipeUp { app.swipeUp() } else { app.swipeDown() }
+        }
+        RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+      }
+      if element.exists && element.isHittable { return true }
     }
     return false
   }

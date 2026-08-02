@@ -46,7 +46,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: api
-          image: ghcr.io/cutedandelion/gtm-agent-api@sha256:09810c97eac666f4cbbf383ac29f213995cda496c4c0fd4baa12bed338922284
+          image: ghcr.io/cutedandelion/gtm-agent-api@sha256:5b325d3b5ed935e231e6a250e9dd55d8e04877c662c2756895c32460df2b0cd5
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
