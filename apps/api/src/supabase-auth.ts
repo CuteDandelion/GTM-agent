@@ -33,7 +33,9 @@ export function createEnvironmentAuthService(environment: NodeJS.ProcessEnv = pr
   if (!url || !publishableKey) return { authenticate: async () => undefined };
   const client = createClient(url, publishableKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { fetch: createSupabaseFetch() },
   });
   return createSupabaseAuthService(client);
 }
 import { createClient } from "@supabase/supabase-js";
+import { createSupabaseFetch } from "./supabase-fetch.js";

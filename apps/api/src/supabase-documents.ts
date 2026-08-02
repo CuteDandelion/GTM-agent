@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createDocumentReader, type ExtractedDocument } from "@gtm/documents";
+import { createSupabaseFetch } from "./supabase-fetch.js";
 
 type DocumentRow = {
   id: string;
@@ -107,6 +108,7 @@ export function createEnvironmentDocumentService(
   if (!url || !secretKey) return undefined;
   return createSupabaseDocumentService(createClient(url, secretKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { fetch: createSupabaseFetch() },
   }), {
     maxBytes: 10_485_760,
     maxCharacters: 100_000,

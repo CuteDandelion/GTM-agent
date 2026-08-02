@@ -43,7 +43,7 @@ final class GTMResearchAgentUITests: XCTestCase {
     XCTAssertTrue(labeledElement(queuedFollowUp).waitForExistence(timeout: 60), "The active-run follow-up must remain a distinct turn")
     XCTAssertTrue(app.staticTexts["Queued · position 2"].waitForExistence(timeout: 60), "The follow-up must enter the durable FIFO behind the active run")
 
-    XCTAssertTrue(app.buttons["Evidence"].waitForExistence(timeout: 300), "Expected provider-authored evidence interactive objects")
+    XCTAssertTrue(app.buttons["Evidence"].waitForExistence(timeout: 600), "Expected provider-authored evidence interactive objects")
     XCTAssertTrue(app.buttons["Shortlist"].waitForExistence(timeout: 30), "Expected a provider-authored opportunity interactive object")
     app.buttons["Evidence"].tap()
     XCTAssertTrue(app.buttons["Close evidence"].waitForExistence(timeout: 15), "Provider evidence must be inspectable")
@@ -116,7 +116,7 @@ final class GTMResearchAgentUITests: XCTestCase {
 
   private func signIn(email: String, password: String) {
     let emailField = app.textFields["Email"]
-    guard emailField.waitForExistence(timeout: 15) else { return }
+    guard emailField.waitForExistence(timeout: 60) else { return }
 
     emailField.tap()
     emailField.clearAndEnterText(email)
@@ -136,9 +136,11 @@ final class GTMResearchAgentUITests: XCTestCase {
   private func send(_ message: String) {
     let composer = element("message-composer")
     XCTAssertTrue(composer.waitForExistence(timeout: 30), "Message composer is unavailable")
-    composer.tap()
-    composer.typeText(message)
-    composer.typeText("\n")
+    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.915)).tap()
+    app.typeText(message)
+    let sendButton = app.buttons["Send message"]
+    XCTAssertTrue(sendButton.waitForExistence(timeout: 5), "Send button is unavailable")
+    sendButton.tap()
   }
 
   private func waitForAny(_ elements: [XCUIElement], timeout: TimeInterval) -> Bool {

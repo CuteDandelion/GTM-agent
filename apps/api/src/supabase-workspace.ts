@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import type { WorkspaceService } from "./server.js";
+import { createSupabaseFetch } from "./supabase-fetch.js";
 
 type SellerProfileRow = {
   id: string;
@@ -179,5 +180,6 @@ export function createEnvironmentWorkspaceService(
   if (!url || !secretKey) return undefined;
   return createSupabaseWorkspaceService(createClient(url, secretKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { fetch: createSupabaseFetch() },
   }));
 }

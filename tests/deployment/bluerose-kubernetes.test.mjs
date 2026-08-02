@@ -35,6 +35,11 @@ test("the container runs as an unprivileged production process", () => {
   assert.match(dockerfile, /FROM node:22[^\n]* AS runtime/);
   assert.match(dockerfile, /ENV NODE_ENV=production/);
   assert.match(dockerfile, /USER node/);
+  assert.match(deployment, /runAsNonRoot:\s*true/);
+  assert.match(deployment, /runAsUser:\s*1000/);
+  assert.match(deployment, /runAsGroup:\s*1000/);
+  assert.match(deployment, /volumeMounts:[\s\S]*name:\s*tmp[\s\S]*mountPath:\s*\/tmp/);
+  assert.match(deployment, /volumes:[\s\S]*name:\s*tmp[\s\S]*emptyDir:[\s\S]*sizeLimit:\s*64Mi/);
   assert.match(dockerfile, /EXPOSE 3000/);
   assert.match(dockerfile, /CMD \["\.\/node_modules\/\.bin\/tsx", "apps\/api\/src\/main\.ts"\]/);
   assert.doesNotMatch(dockerfile, /CMD \["npm"/);

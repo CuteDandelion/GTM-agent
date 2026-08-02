@@ -6,6 +6,7 @@ import {
   type ApplyInteractiveObjectActionInput,
   type InteractiveObjectService,
 } from "./interactive-actions.js";
+import { createSupabaseFetch } from "./supabase-fetch.js";
 
 type InteractiveObjectRow = {
   id: string;
@@ -100,5 +101,6 @@ export function createEnvironmentInteractiveObjectService(
   if (!url || !secretKey) return undefined;
   return createSupabaseInteractiveObjectService(createClient(url, secretKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { fetch: createSupabaseFetch() },
   }));
 }

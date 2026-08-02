@@ -40,16 +40,21 @@ spec:
       terminationGracePeriodSeconds: 30
       securityContext:
         runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
       containers:
         - name: api
-          image: ghcr.io/cutedandelion/gtm-agent-api@sha256:d244b7f945467bfc2653258280cc15836e4f411597c585d18d68fe001ef37c61
+          image: ghcr.io/cutedandelion/gtm-agent-api@sha256:5ed7632fd5c97e5312dee49dbe0382c4454a9e32b270fadbc368a22de5b0b5c2
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 3000
               protocol: TCP
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           env:
             - name: NODE_ENV
               value: production
@@ -106,6 +111,10 @@ spec:
             capabilities:
               drop:
                 - ALL
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
 ---
 apiVersion: v1
 kind: Service

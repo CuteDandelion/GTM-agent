@@ -4,6 +4,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { CheckpointStore, RunCheckpoint } from "@gtm/orchestration";
 
 import type { ResearchArtifactStore } from "./research-artifacts.js";
+import { createSupabaseFetch } from "./supabase-fetch.js";
 import {
   ResearchRunConflictError,
   type ResearchRunSnapshot,
@@ -321,5 +322,6 @@ export function createEnvironmentResearchPersistence(
   if (!url || !secretKey) return undefined;
   return createSupabaseResearchPersistence(createClient(url, secretKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { fetch: createSupabaseFetch() },
   }));
 }
