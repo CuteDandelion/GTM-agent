@@ -26,6 +26,32 @@ function createClient(options: {
 }
 
 describe("Supabase interactive-object persistence", () => {
+  it("rejects an invalid projection before it can be persisted", async () => {
+    let rpcCalls = 0;
+    const client = createClient({});
+    client.rpc = async () => {
+      rpcCalls += 1;
+      return { data: null, error: null };
+    };
+    const service = createSupabaseInteractiveObjectService(client as never);
+
+    await expect(service.publish!({
+      ownerId,
+      conversationId,
+      objectKey: "company-profile:foodbegood.app",
+      object: {
+        type: "company_profile",
+        company: "Food Be Good",
+        domain: "foodbegood.app",
+        summary: "Public company profile",
+        facts: [],
+        pros: [],
+        cons: [],
+      },
+    })).rejects.toThrow(/facts/i);
+    expect(rpcCalls).toBe(0);
+  });
+
   it("publishes a projection through the atomic owner-scoped database function", async () => {
     const calls: Array<{ name: string; args: unknown }> = [];
     const client = createClient({

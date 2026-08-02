@@ -31,6 +31,12 @@ export function createSupabaseInteractiveObjectService(client: SupabaseClient): 
     async publish(input) {
       const objectType = typeof input.object.type === "string" ? input.object.type : undefined;
       if (!objectType) throw new Error("Interactive-object projection requires a type");
+      parseInteractiveObject({
+        ...input.object,
+        id: "projection-validation",
+        conversationId: input.conversationId,
+        version: 1,
+      });
       const result = await client.rpc("publish_interactive_object", {
         p_owner_id: input.ownerId,
         p_conversation_id: input.conversationId,

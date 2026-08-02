@@ -72,7 +72,8 @@ function projectionCompanyProfiles(profileOutput: JsonRecord | undefined) {
   const company = asRecord(profileOutput?.company);
   const assessment = asRecord(profileOutput?.icpAssessment);
   if (!company || !assessment) return [];
-  const opportunity = asRecord(profileOutput?.opportunity);
+  const profile = asRecord(company.profile);
+  const opportunity = asRecord(profileOutput?.opportunity) ?? asRecord(profileOutput?.recommendedOpportunity);
   const caveats = Array.isArray(profileOutput?.caveats)
     ? profileOutput.caveats.flatMap((value) => asText(value) ? [asText(value)!] : [])
     : [];
@@ -84,11 +85,12 @@ function projectionCompanyProfiles(profileOutput: JsonRecord | undefined) {
     company: company.name,
     domain: company.domain,
     profile: {
-      background: company.profile,
-      product: company.profile,
+      background: asText(company.profile) ?? asText(profile?.positioning),
+      product: asText(company.profile) ?? asText(profile?.positioning),
       operatingScale: company.stage,
       hiringSignal: company.teamSignal,
     },
+    sourceFacts: asRecords(profileOutput?.facts),
     icpAssessment: {
       ...assessment,
       rationale: asText(assessment.rationale) ?? inferenceRationale,
@@ -96,7 +98,9 @@ function projectionCompanyProfiles(profileOutput: JsonRecord | undefined) {
     },
     automationHypotheses: opportunity ? [{
       opportunity: opportunity.name,
-      value: asText(opportunity.hypothesis) ?? asText(opportunity.commercialValue),
+      value: asText(opportunity.hypothesis)
+        ?? asText(opportunity.commercialValue)
+        ?? asText(opportunity.whyThisOpportunity),
       controls: opportunity.guardrails,
     }] : [],
   }];
@@ -221,17 +225,23 @@ export function createRunProjectionObserver(service: InteractiveObjectService) {
       const technologySignal = asText(profile.technologySignal);
       const hypothesis = asRecords(companyProfile.automationHypotheses)[0];
       const fit = assessment.fit;
+      const sourceFacts = asRecords(companyProfile.sourceFacts).flatMap((fact, index) => {
+        const value = asText(fact.claim) ?? asText(fact.statement) ?? asText(fact.value);
+        return value ? [{ label: `Evidence ${index + 1}`, value }] : [];
+      }).slice(0, 3);
+      const facts = [
+        { label: "Background", value: asText(profile.background) },
+        { label: "Scale", value: asText(profile.operatingScale) },
+        { label: "Hiring", value: asText(profile.hiringSignal) },
+      ].filter((fact): fact is { label: string; value: string } => Boolean(fact.value)).concat(sourceFacts);
+      if (facts.length === 0) facts.push({ label: "Domain", value: domain });
 
       await publish(`company-profile:${domain}`, {
         type: "company_profile",
         company,
         domain,
         summary: asText(profile.product) ?? asText(profile.background) ?? "Public company profile",
-        facts: [
-          { label: "Background", value: asText(profile.background) },
-          { label: "Scale", value: asText(profile.operatingScale) },
-          { label: "Hiring", value: asText(profile.hiringSignal) },
-        ].filter((fact): fact is { label: string; value: string } => Boolean(fact.value)),
+        facts,
         pros: technologySignal ? [technologySignal] : [],
         cons: risks,
       });
@@ -257,24 +267,27 @@ export function createRunProjectionObserver(service: InteractiveObjectService) {
         });
       }
       const evidence = approvedClaims.filter((claim) => asText(claim.company)?.toLowerCase() === company.toLowerCase());
-      await publish(`evidence:${domain}`, {
-        type: "evidence_collection",
-        title: `${company} evidence`,
-        subtitle: "Approved source-backed claims",
-        items: evidence.flatMap((claim, index) => {
-          const statement = asText(claim.statement) ?? asText(claim.fact) ?? asText(claim.claim);
-          const sourceUrl = asText(claim.sourceUrl) ?? asText(claim.source);
-          if (!statement || !sourceUrl) return [];
-          return [{
-            id: `${snapshot.runId}-source-${index + 1}`,
-            title: `${company} source`,
-            url: sourceUrl,
-            excerpt: statement,
-            classification: "fact",
-            confidence: 5,
-          }];
-        }),
+      const evidenceItems = evidence.flatMap((claim, index) => {
+        const statement = asText(claim.statement) ?? asText(claim.fact) ?? asText(claim.claim);
+        const sourceUrl = asText(claim.sourceUrl) ?? asText(claim.source);
+        if (!statement || !sourceUrl) return [];
+        return [{
+          id: `${snapshot.runId}-source-${index + 1}`,
+          title: `${company} source`,
+          url: sourceUrl,
+          excerpt: statement,
+          classification: "fact" as const,
+          confidence: 5,
+        }];
       });
+      if (evidenceItems.length > 0) {
+        await publish(`evidence:${domain}`, {
+          type: "evidence_collection",
+          title: `${company} evidence`,
+          subtitle: "Approved source-backed claims",
+          items: evidenceItems,
+        });
+      }
     }
     const domainsByCompany = new Map(companyProfiles.flatMap((profile) => {
       const company = asText(profile.company);

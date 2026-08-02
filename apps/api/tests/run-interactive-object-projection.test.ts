@@ -322,6 +322,64 @@ describe("research run mobile projection", () => {
     }] });
   });
 
+  it("projects nested provider profiles, recommended opportunities, and approved claims", async () => {
+    const service = new InMemoryInteractiveObjectService();
+    const observe = bootstrap.createRunProjectionObserver(service) as unknown as (snapshot: Record<string, unknown>) => Promise<void>;
+    const ownerId = "11111111-1111-4111-8111-111111111111";
+    const conversationId = "22222222-2222-4222-8222-222222222222";
+    await observe({
+      runId: "33333333-3333-4333-8333-333333333333",
+      conversationId,
+      status: "completed",
+      input: { ownerId, conversationId, domains: ["foodbegood.app"] },
+      checkpoint: {
+        status: "completed",
+        nodes: {
+          "company-profile": { status: "completed", output: { output: {
+            company: {
+              name: "Food Be Good",
+              domain: "foodbegood.app",
+              profile: {
+                positioning: "Food-sharing platform for canteens and diners.",
+                targetContexts: ["Canteen operations"],
+                businessModelSignals: ["Marketplace workflow"],
+              },
+            },
+            facts: [{ claim: "The product supports canteen food availability.", sourceUrl: "https://foodbegood.app" }],
+            hypotheses: [{ claim: "Partner operations may contain repeatable manual work." }],
+            inferences: [{ claim: "A bounded pilot is plausible." }],
+            icpAssessment: { fit: "medium", rationale: "Operational workflows fit the offer." },
+            recommendedOpportunity: {
+              name: "Human-approved partner operations agent",
+              whyThisOpportunity: "Prepare exception queues for human review.",
+              guardrails: ["Human approval before external messages."],
+            },
+          } } },
+          "final-review": { status: "completed", output: { output: {
+            approvedClaims: [{
+              company: "Food Be Good",
+              statement: "The product supports canteen food availability.",
+              sourceUrl: "https://foodbegood.app",
+            }],
+          } } },
+        },
+      },
+    });
+
+    const objects = await service.listForConversation(ownerId, conversationId) as Array<Record<string, unknown>>;
+    expect(objects.find((object) => object.type === "company_profile")).toMatchObject({
+      summary: "Food-sharing platform for canteens and diners.",
+      facts: expect.arrayContaining([{ label: "Evidence 1", value: "The product supports canteen food availability." }]),
+    });
+    expect(objects.find((object) => object.type === "opportunity")).toMatchObject({
+      title: "Human-approved partner operations agent",
+      summary: "Prepare exception queues for human review.",
+    });
+    expect(objects.find((object) => object.type === "evidence_collection")).toMatchObject({
+      items: [{ excerpt: "The product supports canteen food availability." }],
+    });
+  });
+
   it("projects a partial five-domain batch as four ranked targets plus the failed target", async () => {
     const service = new InMemoryInteractiveObjectService();
     const observe = bootstrap.createRunProjectionObserver(service) as unknown as (snapshot: Record<string, unknown>) => Promise<void>;
@@ -366,6 +424,10 @@ describe("research run mobile projection", () => {
     });
 
     const objects = await service.listForConversation(ownerId, conversationId) as Array<Record<string, unknown>>;
+    for (const profile of objects.filter((object) => object.type === "company_profile")) {
+      expect(profile.facts).toEqual(expect.arrayContaining([{ label: "Domain", value: expect.any(String) }]));
+    }
+    expect(objects.some((object) => object.type === "evidence_collection")).toBe(false);
     expect(objects.find((object) => object.type === "company_comparison")).toMatchObject({
       title: "Company priority",
       entries: [
