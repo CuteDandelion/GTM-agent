@@ -198,6 +198,7 @@ export function createRunProjectionObserver(service: InteractiveObjectService) {
     if (snapshot.status !== "completed" || !snapshot.checkpoint) return;
 
     const profileOutput = nodeOutput(snapshot.checkpoint, "company-profile");
+    const criticalReviewOutput = nodeOutput(snapshot.checkpoint, "critical-review");
     const finalReviewOutput = nodeOutput(snapshot.checkpoint, "final-review");
     const portfolioOutput = nodeOutput(snapshot.checkpoint, "portfolio-comparison");
     const crawlOutput = asRecord(nodeOutput(snapshot.checkpoint, "crawl-company")?.crawl_company);
@@ -210,6 +211,13 @@ export function createRunProjectionObserver(service: InteractiveObjectService) {
       const assessment = asRecord(companyProfile.icpAssessment);
       if (!company || !domain || !profile || !assessment) continue;
       const risks = Array.isArray(assessment.risks) ? assessment.risks.flatMap((risk) => asText(risk) ? [asText(risk)!] : []) : [];
+      const skepticAnnotations = asRecords(criticalReviewOutput?.rejectedClaims).flatMap((claim) => {
+        const claimCompany = asText(claim.company);
+        const statement = asText(claim.statement) ?? asText(claim.claim);
+        const reason = asText(claim.reason);
+        if (!claimCompany || claimCompany.toLowerCase() !== company.toLowerCase() || !statement || !reason) return [];
+        return [`Skeptic rejected: ${statement} — ${reason}`];
+      });
       const technologySignal = asText(profile.technologySignal);
       const hypothesis = asRecords(companyProfile.automationHypotheses)[0];
       const fit = assessment.fit;
@@ -233,7 +241,7 @@ export function createRunProjectionObserver(service: InteractiveObjectService) {
         score: assessmentScore(assessment),
         band: fitBand(fit),
         reasons: asText(assessment.rationale) ? [asText(assessment.rationale)!] : [],
-        gaps: risks,
+        gaps: [...risks, ...skepticAnnotations],
       });
       if (hypothesis) {
         await publish(`opportunity:${domain}`, {

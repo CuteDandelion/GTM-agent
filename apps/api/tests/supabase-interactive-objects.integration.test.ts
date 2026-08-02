@@ -55,12 +55,53 @@ describe("Supabase interactive-object projection integration", () => {
         }) as { id: string; version: number };
 
         expect(second).toMatchObject({ id: first.id, version: 2 });
+        const prompt = await service.publish({
+          ...shared,
+          objectKey: "decision-scope",
+          object: {
+            type: "interaction_prompt",
+            purpose: "clarification",
+            title: "Choose a target scope",
+            prompt: "Which workflow should I evaluate first?",
+            selection: "single",
+            options: [
+              { id: "sales", label: "Sales workflow" },
+              { id: "support", label: "Support workflow" },
+            ],
+            allowFreeText: true,
+          },
+        }) as { id: string; version: number };
+        await expect(service.applyAction({
+          objectId: prompt.id,
+          ownerId: owner.id,
+          action: "respond",
+          expectedVersion: prompt.version,
+          payload: { optionId: "sales", label: "Sales workflow" },
+        })).resolves.toMatchObject({
+          objectId: prompt.id,
+          version: 2,
+          action: "respond",
+        });
         await expect(service.listForConversation(owner.id, conversation.id)).resolves.toMatchObject([{
           id: first.id,
           version: 2,
           type: "workflow_progress",
           live: false,
+        }, {
+          id: prompt.id,
+          version: 2,
+          type: "interaction_prompt",
         }]);
+        const feedback = await admin.from("feedback_events")
+          .select("event_type,payload")
+          .eq("owner_id", owner.id)
+          .eq("interactive_object_id", prompt.id)
+          .single();
+        expect(feedback.error).toBeNull();
+        expect(feedback.data).toMatchObject({
+          event_type: "respond",
+          payload: { optionId: "sales", label: "Sales workflow" },
+        });
 
         const ownerClient = createClient(url, publishableKey, {
           auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },

@@ -3,6 +3,8 @@ import { lookup } from "node:dns/promises";
 import {
   createFunctionToolAdapters,
   createOpenAIAgentsRuntime,
+  type AgentRuntime,
+  type FunctionToolAdapterDefinition,
   type ToolRunContext,
 } from "@gtm/agents";
 import { createPinnedNodeFetcher, createSafeCrawler, validatePublicUrl } from "@gtm/crawler";
@@ -177,6 +179,24 @@ export function createApplicationResearchService(options: {
   documentService?: DocumentService;
   interactiveObjectService?: InteractiveObjectService;
   enqueue?: CreateResearchServiceOptions["enqueue"];
+  createAgentRuntime?: (
+    tools: Record<string, FunctionToolAdapterDefinition>,
+  ) => AgentRuntime;
+  deterministicDomainTools?: {
+    validatePublicDomain(domain: string): Promise<string>;
+    crawlDomain(domain: string): Promise<{
+      rootUrl: string;
+      pages: Array<{
+        url: string;
+        title?: string;
+        text: string;
+        textTruncated?: boolean;
+        contentHash: string;
+        observedAt: string;
+        trust: "untrusted_external";
+      }>;
+    }>;
+  };
 } = {}) {
   const persistence = options.persistence ?? createEnvironmentResearchPersistence();
   if (!persistence && process.env.NODE_ENV === "production") {
@@ -206,7 +226,7 @@ export function createApplicationResearchService(options: {
     maxTextCharactersPerPage: 4_000,
   });
 
-  const customTools = createFunctionToolAdapters({
+  const toolDefinitions: Record<string, FunctionToolAdapterDefinition> = {
     get_seller_profile: {
       description: "Return the seller's approved service profile and positioning constraints.",
       handler: async () => ({
@@ -256,12 +276,14 @@ export function createApplicationResearchService(options: {
     },
     ...portfolioToolDefinitions,
     ...documentToolDefinitions,
-  });
-  const agentRuntime = createOpenAIAgentsRuntime({
-    customTools,
-    vectorStoreIds: (process.env.OPENAI_VECTOR_STORE_IDS ?? "").split(",").map((id) => id.trim()).filter(Boolean),
-    maxTurns: 6,
-  });
+  };
+  const agentRuntime = options.createAgentRuntime
+    ? options.createAgentRuntime(toolDefinitions)
+    : createOpenAIAgentsRuntime({
+        customTools: createFunctionToolAdapters(toolDefinitions),
+        vectorStoreIds: (process.env.OPENAI_VECTOR_STORE_IDS ?? "").split(",").map((id) => id.trim()).filter(Boolean),
+        maxTurns: 6,
+      });
   const runStore = persistence?.runStore ?? new InMemoryResearchRunStore();
   const projectionObserver = options.interactiveObjectService
     ? createRunProjectionObserver(options.interactiveObjectService)
@@ -280,8 +302,10 @@ export function createApplicationResearchService(options: {
     checkpointStore,
     deterministicTools: createDeterministicDomainTools({
       artifactStore,
-      validatePublicDomain: async (domain) => (await validatePublicUrl(domain, resolveHost)).toString(),
-      crawlDomain: (domain) => crawler.crawl(domain),
+      validatePublicDomain: options.deterministicDomainTools?.validatePublicDomain
+        ?? (async (domain) => (await validatePublicUrl(domain, resolveHost)).toString()),
+      crawlDomain: options.deterministicDomainTools?.crawlDomain
+        ?? ((domain) => crawler.crawl(domain)),
     }),
   });
 

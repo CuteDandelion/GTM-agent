@@ -134,6 +134,65 @@ describe("GtmApp session bootstrap", () => {
     );
   });
 
+  it("opens the empty conversation immediately after the seller profile is saved", async () => {
+    const authService = createAuthService("restored-token");
+    const conversationId = "33333333-3333-4333-8333-333333333333";
+    const fetcher = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/seller-profile") && init?.method === "PUT") {
+        return new Response(JSON.stringify({
+          id: "22222222-2222-4222-8222-222222222222",
+          ownerId: "11111111-1111-4111-8111-111111111111",
+          businessName: "Dandelion AI Studio",
+          offerSummary: "AI and agent automation",
+          capabilities: ["Agent orchestration", "Workflow automation"],
+          proofPoints: ["Human-approved delivery"],
+          constraints: { externalWritesRequireApproval: true },
+          updatedAt: "2026-08-02T09:00:00.000Z",
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (url.endsWith("/seller-profile")) {
+        return new Response(JSON.stringify({ error: "seller_profile_not_found" }), {
+          status: 404,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.endsWith("/conversations")) return new Response(JSON.stringify([{
+        id: conversationId,
+        ownerId: "11111111-1111-4111-8111-111111111111",
+        sellerProfileId: null,
+        icpDefinitionId: null,
+        title: "GTM research",
+        status: "active",
+        createdAt: "2026-08-02T09:00:00.000Z",
+        updatedAt: "2026-08-02T09:00:00.000Z",
+      }]), { status: 200, headers: { "content-type": "application/json" } });
+      if (url.endsWith("/messages") || url.endsWith("/interactive-objects")) {
+        return new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const screen = await render(<GtmApp
+      apiBaseUrl="https://api.example.com"
+      authService={authService}
+      fetcher={fetcher as typeof fetch}
+    />);
+
+    await waitFor(() => screen.getByText("Before we research companies, what should I call your business?"));
+    for (const answer of [
+      "Dandelion AI Studio",
+      "AI and agent automation",
+      "Agent orchestration, Workflow automation",
+      "Human-approved delivery",
+    ]) {
+      await fireEvent.changeText(screen.getByLabelText("Message GTM Research Agent"), answer);
+      await fireEvent.press(screen.getByRole("button", { name: "Send message" }));
+    }
+
+    await waitFor(() => screen.getByText("Start a new GTM conversation"));
+    expect(screen.queryByText("Your seller profile is saved. Which company should we analyze first?")).toBeNull();
+  });
+
   it("restores the canonical conversation when the authenticated operator already has a profile", async () => {
     const authService = createAuthService("restored-token");
     const conversationId = "33333333-3333-4333-8333-333333333333";

@@ -479,6 +479,7 @@ export function GtmConversationScreen({
   documentPicker,
   documentUploadService,
   conversationExportService,
+  onOnboardingComplete,
   debugEnabled = __DEV__,
   initialEvidenceOpen = false,
   fetcher = fetch,
@@ -492,6 +493,7 @@ export function GtmConversationScreen({
   documentPicker?: { pick(): Promise<UploadableDocument | undefined> };
   documentUploadService?: DocumentUploadService;
   conversationExportService?: ConversationExportService;
+  onOnboardingComplete?: () => void;
   debugEnabled?: boolean;
   initialEvidenceOpen?: boolean;
   fetcher?: typeof fetch;
@@ -678,6 +680,7 @@ export function GtmConversationScreen({
           },
         });
         setOnboardingStep(4);
+        onOnboardingComplete?.();
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "Unable to save seller profile");
       } finally {

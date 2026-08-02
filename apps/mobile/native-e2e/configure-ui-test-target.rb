@@ -41,6 +41,7 @@ scheme.test_action.should_use_launch_scheme_args_env = false
 
 test_environment = Xcodeproj::XCScheme::EnvironmentVariables.new
 {
+  "NATIVE_E2E_MODE" => ENV["NATIVE_E2E_MODE"],
   "NATIVE_E2E_EMAIL" => ENV["NATIVE_E2E_EMAIL"],
   "NATIVE_E2E_PASSWORD" => ENV["NATIVE_E2E_PASSWORD"],
 }.each do |key, value|

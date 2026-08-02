@@ -150,6 +150,9 @@ export function GtmApp({
       documentPicker={documentPicker}
       documentUploadService={documentUploadService}
       conversationExportService={conversationExportServiceFactory?.({ accessToken: state.accessToken, conversationId: state.conversationId })}
+      onOnboardingComplete={() => setState((current) => current.kind === "ready"
+        ? { ...current, hasProfile: true }
+        : current)}
       fetcher={fetcher}
     />;
   }

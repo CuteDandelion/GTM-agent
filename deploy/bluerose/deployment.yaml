@@ -44,7 +44,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: api
-          image: ghcr.io/cutedandelion/gtm-agent-api:REPLACE_WITH_COMMIT_SHA
+          image: ghcr.io/cutedandelion/gtm-agent-api@sha256:d244b7f945467bfc2653258280cc15836e4f411597c585d18d68fe001ef37c61
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

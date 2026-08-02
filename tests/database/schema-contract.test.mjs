@@ -79,3 +79,37 @@ test("conversation workflow prompts have a service-only atomic FIFO claim functi
   assert.match(sql, /revoke all on function public\.claim_next_conversation_workflow_run[\s\S]*from public, anon, authenticated/i);
   assert.match(sql, /grant execute on function public\.claim_next_conversation_workflow_run[\s\S]*to service_role/i);
 });
+
+test("dynamic interaction prompts and responses remain compatible with the database RPCs", async () => {
+  const files = await readdir(new URL("../../supabase/migrations/", import.meta.url));
+  const migrationFile = files.find((file) => file.endsWith("_publish_interactive_object.sql"));
+  assert.ok(migrationFile, "expected a publish_interactive_object migration");
+  const sql = await readFile(
+    new URL(`../../supabase/migrations/${migrationFile}`, import.meta.url),
+    "utf8",
+  );
+
+  assert.match(sql, /p_object_type\s+not\s+in\s*\([\s\S]*'interaction_prompt'[\s\S]*\)/i);
+  assert.match(sql, /create or replace function public\.apply_interactive_object_action/i);
+  assert.match(sql, /p_action\s+not\s+in\s*\([\s\S]*'respond'[\s\S]*\)/i);
+  assert.match(sql, /revoke all on function public\.apply_interactive_object_action[\s\S]*from public, anon, authenticated/i);
+  assert.match(sql, /grant execute on function public\.apply_interactive_object_action[\s\S]*to service_role/i);
+});
+
+test("authenticated users retain only explicitly bounded trusted-table privileges", async () => {
+  const files = await readdir(new URL("../../supabase/migrations/", import.meta.url));
+  const migrationFile = files.find((file) => file.endsWith("_restrict_authenticated_trusted_writes.sql"));
+  assert.ok(migrationFile, "expected a restrict_authenticated_trusted_writes migration");
+  const sql = await readFile(
+    new URL(`../../supabase/migrations/${migrationFile}`, import.meta.url),
+    "utf8",
+  );
+
+  assert.match(sql, /revoke all privileges on table public\.%I from authenticated/i);
+  assert.match(sql, /grant select on table public\.%I to authenticated/i);
+  assert.match(sql, /revoke all privileges on table public\.workflow_checkpoints, public\.research_artifacts from authenticated/i);
+  assert.match(sql, /grant select on table public\.workflow_checkpoints, public\.research_artifacts to authenticated/i);
+  assert.match(sql, /revoke all privileges on table public\.user_documents from authenticated/i);
+  assert.match(sql, /grant select on table public\.user_documents to authenticated/i);
+  assert.match(sql, /grant insert\s*\([\s\S]*status[\s\S]*\)\s*on table public\.user_documents to authenticated/i);
+});

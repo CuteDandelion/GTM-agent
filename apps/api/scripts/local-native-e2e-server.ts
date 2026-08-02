@@ -43,13 +43,6 @@ const created = await admin.auth.admin.createUser({ email, password, email_confi
 if (created.error || !created.data.user) throw created.error ?? new Error("Unable to create local E2E user");
 const ownerId = created.data.user.id;
 const workspaceService = createSupabaseWorkspaceService(admin);
-await workspaceService.upsertSellerProfile(ownerId, {
-  businessName: "Dandelion AI Studio",
-  offerSummary: "Evidence-led AI and agent automation for startups and operating teams.",
-  capabilities: ["Agent orchestration", "Workflow automation", "AI integration"],
-  proofPoints: ["Human-approved automation delivery"],
-  constraints: { externalWritesRequireApproval: true },
-});
 
 const persistence = createSupabaseResearchPersistence(admin, { workerLeaseId: randomUUID() });
 const interactiveObjectService = createSupabaseInteractiveObjectService(admin);

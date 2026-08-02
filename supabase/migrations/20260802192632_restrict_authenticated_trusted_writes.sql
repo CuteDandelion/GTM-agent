@@ -20,7 +20,8 @@ begin
     'interactive_objects',
     'feedback_events'
   ] loop
-    execute format('revoke insert, update, delete on table public.%I from authenticated', table_name);
+    execute format('revoke all privileges on table public.%I from authenticated', table_name);
+    execute format('grant select on table public.%I to authenticated', table_name);
     execute format('drop policy if exists %I on public.%I', table_name || '_owner_all', table_name);
     execute format(
       'create policy %I on public.%I for select to authenticated using ((select auth.uid()) = owner_id)',
@@ -33,14 +34,15 @@ $$;
 
 -- These were already service-written in the durable-state migration. Repeat
 -- the least-privilege boundary here so future grant changes cannot reopen it.
-revoke insert, update, delete on table public.workflow_checkpoints from authenticated;
-revoke insert, update, delete on table public.research_artifacts from authenticated;
+revoke all privileges on table public.workflow_checkpoints, public.research_artifacts from authenticated;
+grant select on table public.workflow_checkpoints, public.research_artifacts to authenticated;
 
 -- A mobile client may register the immutable metadata of a file it just put
 -- in the owner-scoped Storage bucket. Processing state, hashes, extraction
 -- results, provider IDs, errors, timestamps, updates, and deletes remain
 -- service-only.
-revoke insert, update, delete on table public.user_documents from authenticated;
+revoke all privileges on table public.user_documents from authenticated;
+grant select on table public.user_documents to authenticated;
 grant insert (
   id,
   owner_id,
