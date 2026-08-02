@@ -34,4 +34,4 @@ USER node
 
 EXPOSE 3000
 
-CMD ["npm", "start", "-w", "@gtm/api"]
+CMD ["./node_modules/.bin/tsx", "apps/api/src/main.ts"]
