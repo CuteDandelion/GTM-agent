@@ -25,6 +25,7 @@ ENV XDG_CACHE_HOME=/tmp/opencode-cache
 ENV XDG_CONFIG_HOME=/tmp/opencode-config
 ENV XDG_STATE_HOME=/tmp/opencode-state
 ENV npm_config_cache=/tmp/npm-cache
+ENV PATH=/app/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 WORKDIR /app
 

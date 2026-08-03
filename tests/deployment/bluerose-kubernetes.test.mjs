@@ -16,7 +16,7 @@ test("the Bluerose deployment is isolated and exposes only a ClusterIP service",
 test("the API has rollout, resource, and health protections", () => {
   assert.match(
     deployment,
-    /image:\s*ghcr\.io\/cutedandelion\/gtm-agent-api@sha256:ae01c121262a7dbbe6aa6ca4912a42f88199f21e6befcc54a48b1e96855135c6/,
+    /image:\s*ghcr\.io\/cutedandelion\/gtm-agent-api@sha256:d9ce1fe4cd7e78bd4b52a901bbaed959c3dda132297c192bd42a8f61e09948ee/,
   );
   assert.doesNotMatch(deployment, /REPLACE_WITH_COMMIT_SHA/);
   assert.doesNotMatch(deployment, /image:[^\n]*:latest/);
@@ -27,9 +27,11 @@ test("the API has rollout, resource, and health protections", () => {
 });
 
 test("runtime secrets are referenced, never embedded in the manifest", () => {
-  for (const key of ["OPENCODE_KEY", "SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY"]) {
+  assert.match(deployment, /name: OPENCODE_KEY[\s\S]*secretKeyRef:[\s\S]*name: gtm-agent-opencode-key[\s\S]*key: OPENCODE_KEY/);
+  for (const key of ["SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY"]) {
     assert.match(deployment, new RegExp(`name: ${key}[\\s\\S]*secretKeyRef:[\\s\\S]*name: gtm-agent-api-secrets[\\s\\S]*key: ${key}`));
   }
+  assert.doesNotMatch(deployment, /OPENAI_API_KEY/);
   assert.doesNotMatch(deployment, /sk-[A-Za-z0-9_-]+/);
   assert.doesNotMatch(deployment, /value:\s*(?:https?:\/\/|eyJ|sb_secret)/);
 });
@@ -45,6 +47,8 @@ test("the container runs as an unprivileged production process", () => {
   assert.match(deployment, /volumes:[\s\S]*name:\s*tmp[\s\S]*emptyDir:[\s\S]*sizeLimit:\s*256Mi/);
   assert.match(dockerfile, /ENV XDG_DATA_HOME=\/tmp\/opencode-data/);
   assert.match(dockerfile, /ENV XDG_CACHE_HOME=\/tmp\/opencode-cache/);
+  assert.match(dockerfile, /ENV PATH=\/app\/node_modules\/\.bin:/);
+  assert.match(deployment, /name:\s*PATH[\s\S]*value:\s*\/app\/node_modules\/\.bin:/);
   assert.match(dockerfile, /EXPOSE 3000/);
   assert.match(dockerfile, /CMD \["\.\/node_modules\/\.bin\/tsx", "apps\/api\/src\/main\.ts"\]/);
   assert.doesNotMatch(dockerfile, /CMD \["npm"/);
