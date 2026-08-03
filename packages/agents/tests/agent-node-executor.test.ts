@@ -2,20 +2,35 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createModelRegistry, type NodeExecutionContext, type WorkflowNodeDefinition } from "@gtm/orchestration";
 
-import { createAgentNodeExecutor, createRoleAwareNodeExecutor, type AgentRuntime } from "../src/index.js";
+import {
+  createAgentNodeExecutor,
+  createRoleAwareNodeExecutor,
+  resolveMaxOutputTokens,
+  type AgentRuntime,
+} from "../src/index.js";
 
-function context(node: WorkflowNodeDefinition, useTool = vi.fn()): NodeExecutionContext {
+function context(
+  node: WorkflowNodeDefinition,
+  useTool = vi.fn(),
+  input: unknown = { domain: "acme.ai" },
+): NodeExecutionContext {
   return {
     runId: "run-1",
     node,
     attempt: 1,
-    input: { domain: "acme.ai" },
+    input,
     dependencyOutputs: {},
     useTool,
   };
 }
 
 describe("OpenAI specialist node executor", () => {
+  it("keeps the product default while allowing a bounded evaluator output budget", () => {
+    expect(resolveMaxOutputTokens()).toBe(4_096);
+    expect(resolveMaxOutputTokens(8_192)).toBe(8_192);
+    expect(() => resolveMaxOutputTokens(32_768)).toThrow("maxOutputTokens must be between 1 and 16384");
+  });
+
   it("routes a Luna extraction node with only its scoped tools", async () => {
     const runtime: AgentRuntime = vi.fn(async () => ({
       output: { facts: ["Acme automates support"] },
@@ -43,10 +58,129 @@ describe("OpenAI specialist node executor", () => {
       model: "gpt-5.6-luna",
       reasoningEffort: "low",
       tools: ["web_search", "save_evidence"],
+      instructions: expect.stringContaining("Return exactly one valid JSON object"),
+      input: expect.objectContaining({ requiredTools: ["web_search", "save_evidence"] }),
     }));
+    expect((runtime as ReturnType<typeof vi.fn>).mock.calls[0]?.[0].instructions).toContain("under 3,000 tokens");
+    expect((runtime as ReturnType<typeof vi.fn>).mock.calls[0]?.[0].instructions).toContain("one batched evidence object per company");
+    expect((runtime as ReturnType<typeof vi.fn>).mock.calls[0]?.[0].instructions).toContain("funding amount, valuation, lead investor");
+    expect((runtime as ReturnType<typeof vi.fn>).mock.calls[0]?.[0].instructions).toContain("one atomic factual assertion");
+    expect((runtime as ReturnType<typeof vi.fn>).mock.calls[0]?.[0].instructions).toContain("exact page that directly states it");
     expect(useTool).toHaveBeenCalledWith("web_search");
     expect(useTool).toHaveBeenCalledWith("save_evidence");
     expect(output).toMatchObject({ responseId: "resp_1" });
+  });
+
+  it("requires final source approval before user-facing synthesis", async () => {
+    const runtime: AgentRuntime = vi.fn(async () => ({ output: { approvedClaims: [] }, usedTools: ["get_claim_sources", "web_search"] }));
+    const executor = createAgentNodeExecutor({
+      registry: createModelRegistry(),
+      availableModels: new Set(["gpt-5.6-sol", "gpt-5.6-terra"]),
+      runtime,
+    });
+
+    await executor(context({
+      id: "final-review",
+      dependencies: [],
+      role: "critic",
+      allowedTools: ["get_claim_sources", "web_search"],
+      requiredTools: ["get_claim_sources", "web_search"],
+      retries: 1,
+      timeoutMs: 10_000,
+    }));
+    const finalReviewInstructions = (runtime as ReturnType<typeof vi.fn>).mock.calls[0]?.[0].instructions;
+    expect(finalReviewInstructions).toContain("approvedClaims");
+    expect(finalReviewInstructions).toContain("Reject stale, unsupported, or citation-mismatched claims");
+    expect(finalReviewInstructions).toContain("literal entailment");
+    expect(finalReviewInstructions).toContain("Do not transfer modifiers");
+    expect(finalReviewInstructions).toContain("Review every source-bearing candidate claim");
+    expect(finalReviewInstructions).toContain("at least eight approved atomic claims per company");
+
+    (runtime as ReturnType<typeof vi.fn>).mockClear();
+    (runtime as ReturnType<typeof vi.fn>).mockResolvedValue({ output: { facts: [] }, usedTools: ["search_evidence", "get_opportunities"] });
+    await executor(context({
+      id: "synthesis",
+      dependencies: ["final-review"],
+      role: "analyst",
+      allowedTools: ["search_evidence", "get_opportunities"],
+      requiredTools: ["search_evidence", "get_opportunities"],
+      retries: 1,
+      timeoutMs: 10_000,
+    }));
+    expect((runtime as ReturnType<typeof vi.fn>).mock.calls[0]?.[0].instructions)
+      .toContain("Use only dependencyOutputs.final-review.output.approvedClaims");
+    expect((runtime as ReturnType<typeof vi.fn>).mock.calls[0]?.[0].instructions)
+      .toContain("Copy each approved factual statement verbatim");
+    expect((runtime as ReturnType<typeof vi.fn>).mock.calls[0]?.[0].instructions)
+      .toContain("Include every approved claim exactly once");
+  });
+
+  it("budgets final review and synthesis for a five-company accuracy cohort", async () => {
+    const runtime: AgentRuntime = vi.fn(async (request) => ({
+      output: request.input && (request.input as { nodeId?: string }).nodeId === "final-review"
+        ? { approvedClaims: Array.from({ length: 40 }, (_, index) => ({ statement: `Claim ${index + 1}` })) }
+        : { facts: Array.from({ length: 40 }, (_, index) => ({ statement: `Claim ${index + 1}` })) },
+      usedTools: request.tools,
+    }));
+    const executor = createAgentNodeExecutor({
+      registry: createModelRegistry(),
+      availableModels: new Set(["gpt-5.6-sol", "gpt-5.6-terra"]),
+      runtime,
+    });
+    const workflowInput = { domains: ["one.example", "two.example", "three.example", "four.example", "five.example"] };
+
+    await executor(context({
+      id: "final-review",
+      dependencies: [],
+      role: "critic",
+      allowedTools: ["get_claim_sources", "web_search"],
+      requiredTools: ["get_claim_sources", "web_search"],
+      retries: 1,
+      timeoutMs: 300_000,
+    }, vi.fn(), workflowInput));
+    await executor(context({
+      id: "synthesis",
+      dependencies: ["final-review"],
+      role: "analyst",
+      allowedTools: ["search_evidence", "get_opportunities"],
+      requiredTools: ["search_evidence", "get_opportunities"],
+      retries: 1,
+      timeoutMs: 120_000,
+    }, vi.fn(), workflowInput));
+
+    for (const request of (runtime as ReturnType<typeof vi.fn>).mock.calls.map(([request]) => request)) {
+      expect(request.maxOutputTokens).toBe(8_192);
+      expect(request.instructions).toContain("at most 50 concise facts or evidence records");
+      expect(request.instructions).toContain("under 7,000 tokens");
+    }
+  });
+
+  it("rejects synthesis that omits a final-review approved claim", async () => {
+    const approvedClaims = [
+      { company: "Acme", statement: "Acme has an API.", sourceUrl: "https://acme.example/api" },
+      { company: "Acme", statement: "Acme has webhooks.", sourceUrl: "https://acme.example/webhooks" },
+    ];
+    const runtime: AgentRuntime = vi.fn(async (request) => ({
+      output: { facts: [approvedClaims[0]] },
+      usedTools: request.tools,
+    }));
+    const executor = createAgentNodeExecutor({
+      registry: createModelRegistry(),
+      availableModels: new Set(["gpt-5.6-terra"]),
+      runtime,
+    });
+    const synthesisContext = context({
+      id: "synthesis",
+      dependencies: ["final-review"],
+      role: "analyst",
+      allowedTools: ["search_evidence", "get_opportunities"],
+      requiredTools: ["search_evidence", "get_opportunities"],
+      retries: 1,
+      timeoutMs: 120_000,
+    });
+    synthesisContext.dependencyOutputs = { "final-review": { output: { approvedClaims } } };
+
+    await expect(executor(synthesisContext)).rejects.toThrow(/include every approved claim exactly once/i);
   });
 
   it("will not silently run a Sol critic on Terra", async () => {
@@ -106,6 +240,25 @@ describe("OpenAI specialist node executor", () => {
       retries: 0,
       timeoutMs: 10_000,
     }))).rejects.toThrow(/structured object/i);
+  });
+
+  it("accepts a single fenced JSON object from a provider", async () => {
+    const runtime: AgentRuntime = vi.fn(async () => ({ output: "```json\n{\"facts\":[\"grounded\"]}\n```", usedTools: [] }));
+    const executor = createAgentNodeExecutor({
+      registry: createModelRegistry(),
+      availableModels: new Set(["gpt-5.6-sol"]),
+      runtime,
+    });
+
+    await expect(executor(context({
+      id: "research-plan",
+      dependencies: [],
+      role: "planner",
+      allowedTools: [],
+      requiredTools: [],
+      retries: 0,
+      timeoutMs: 10_000,
+    }))).resolves.toMatchObject({ output: { facts: ["grounded"] } });
   });
 });
 

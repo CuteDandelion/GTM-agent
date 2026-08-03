@@ -81,6 +81,7 @@ flowchart TB
 
     subgraph Bluerose["Bluerose Kubernetes · gtm-agent namespace"]
         API["Conversation API"]
+        TURN["Conversation controller\nReAct decision loop"]
         DAG["Durable DAG scheduler"]
         ROUTER["Model and tool router"]
         GATEWAY["Controlled tool gateway"]
@@ -99,7 +100,9 @@ flowchart TB
     APK --> API
     APK --> REALTIME
     API --> AUTH
-    API --> DAG
+    API --> TURN
+    TURN -->|"answer or clarify"| API
+    TURN -->|"validated research plan"| DAG
     DAG --> ROUTER
     ROUTER --> SOL
     ROUTER --> TERRA
@@ -152,6 +155,16 @@ Fallback policy:
 - Model availability must be verified against the connected OpenAI project before live implementation.
 
 OpenAI's hosted Responses Multi-agent feature is not the primary workflow engine. It is beta, uses the same request model and tool set for the root and its subagents, and is unsuitable for the core Sol-to-Luna-to-Terra DAG. It may later be used inside one same-model DAG node when bounded parallel exploration is beneficial.
+
+### Conversation intelligence and ReAct loops
+
+The API does not translate every message into one fixed company workflow. A model-backed conversation controller receives the complete ordered dialogue, seller profile, current interactive objects, attached-document identifiers, supplied domains, and the read-only tool catalog. Its bounded Agents SDK loop may reason, call a relevant tool, inspect the observation, and continue until it emits one schema-validated decision:
+
+- `answer`: respond directly without creating a research run.
+- `clarify`: ask for missing information, optionally through an interactive prompt object.
+- `research`: provide the domains, objective, and minimum required capability set for a durable DAG run.
+
+The application validates every decision and rejects unknown tools, capabilities, executable UI fields, and external-write actions. The selected capability set activates only relevant branches of the application-owned DAG. Inside each selected model node, a second bounded ReAct loop lets the specialist choose among that node's allowed tools and process tool observations. This preserves conversational intelligence without giving the model authority to invent arbitrary workflows or actions.
 
 ## 6. Research DAG
 
@@ -303,6 +316,16 @@ The mobile app renders trusted schema-driven components:
 - `CompanyComparisonCard`
 
 The model produces validated data, not executable React Native code. Objects are stored independently of chat messages, versioned, and updated through realtime patches.
+
+The active DAG phase and the conversation-level response wait state both use an animated three-dot indicator. When reduced motion is enabled, the dots remain visible but static. The waiting indicator is removed when a newer terminal interactive object arrives.
+
+Prompts submitted while a conversation run is active are retained in a durable per-conversation FIFO queue. The mobile client remains writable, shows `Queued · position N`, and never merges or drops the later prompt. Supabase performs an advisory-lock-protected atomic claim, preventing multiple API replicas from running two prompts from the same conversation concurrently; different conversations may run in parallel.
+
+Conversation history is multi-turn rather than request/response replacement. The client restores ordered user and assistant messages, preserves every newly submitted turn in the timeline, and renders only the assistant text returned and persisted by the conversation controller. Domain-free first turns and follow-ups are valid: the controller can answer directly, ask a clarification, or infer a research target from the current conversation. It must clarify rather than borrow context from another conversation.
+
+Interactive objects are not limited to terminal research cards. The conversation controller may create a schema-validated `interaction_prompt` for clarification, scope selection, assumption review, evidence requests, approval gates, or suggested next steps. Options and free-text responses become observations for the next conversational turn; objects contain data only and cannot ship model-authored executable UI code.
+
+Development builds include an opt-in runtime diagnostics drawer behind a bug icon. It reports API/auth configuration status, conversation and run identifiers, FIFO queue position, active agent phase, message/object/attachment counts, and actionable warnings such as missing progress events or the latest runtime error. The drawer never renders access tokens, API keys, document contents, or private prompt text, and is omitted when debug mode is disabled.
 
 Example progress object:
 
@@ -632,6 +655,7 @@ API tests use a real test database and assert both the HTTP response and resulti
 - Test Realtime publication scope and cross-user isolation.
 - Verify transaction rollback on partially failed node completion.
 - Verify node claiming prevents duplicate execution.
+- Verify two worker processes atomically claim only the oldest queued prompt in one conversation, then release the next prompt after terminal completion.
 - Run Supabase security and performance advisors after schema changes.
 - Verify a backup/export can be restored into a clean local instance.
 
@@ -662,7 +686,12 @@ Live tests are separate from the normal CI lane and require an explicit maximum 
 - Confirm hosted web search returns citations and source metadata.
 - Confirm file search retrieves and cites a controlled test document.
 - Confirm each role uses its required model and tools.
-- Compare representative outputs against scored evaluation fixtures.
+- Run at least five versioned real-world company samples spanning different industries, funding stages, and company sizes.
+- The current unbiased startup cohort is Foodbegood, Langfuse, Attio, ElevenLabs, and Mission Zero Technologies; each sample contains eight primary-source claims and no synthetic company domain.
+- Reconfirm time-sensitive gold facts from their recorded primary sources at evaluation time and retain observation dates and source snapshots.
+- Compare atomic factual claims against independently curated gold facts and score evidence-weighted factual accuracy from 1–100.
+- Require an aggregate factual-accuracy score of at least 97/100; a lower score blocks release rather than becoming an accepted limitation.
+- Fail a sample when a role skips a required current-web, safe-crawl, attached-document/file-search, evidence-retrieval, or citation tool call.
 - Stop immediately when the per-run or overall spend ceiling is reached.
 
 Live provider tests never run automatically on every commit.
@@ -705,6 +734,9 @@ Live provider tests never run automatically on every commit.
 
 ### Quality evaluations
 
+- Evidence-weighted factual accuracy, scored as `100 * correct claim weight / evaluated claim weight`, with contradicted, unverifiable, stale, or citation-mismatched factual claims receiving zero credit.
+- A minimum of 40 independently checkable atomic claims across at least five real-world company samples.
+- Release threshold: aggregate factual accuracy must be at least 97/100, with the raw claims, gold facts, grader decisions, citations, model/tool traces, and score calculation retained as evidence.
 - Company specificity.
 - ICP consistency.
 - Opportunity usefulness.
@@ -804,6 +836,7 @@ Before a release candidate:
 
 - Full Android Emulator and iOS Simulator E2E suites.
 - Bounded live OpenAI evaluations.
+- Real-world factual-accuracy target of 97/100 or higher. For this credit-limited MVP only, the operator explicitly accepted the retained 93.85/100 user-facing precision result on 2026-08-02; future release candidates return to the 97/100 target unless explicitly re-approved.
 - Deployed Bluerose/Supabase integration and recovery tests.
 - Physical Android smoke test.
 - Physical iPhone smoke test when available.
@@ -833,20 +866,30 @@ The MVP is complete only when:
 18. The system performs no autonomous outreach or external writes.
 19. The release evidence report contains no unresolved severity-one or severity-two defect.
 20. Android and iOS implementations match the approved canonical prototype across all three UI states, with every intentional deviation documented and explicitly approved.
+21. At least five real-world samples and 40 atomic factual claims produce an independently reproducible evidence-weighted accuracy result with mandatory research-tool use proven by tool traces. The standing target is 97/100; the operator explicitly accepted the retained 93.85/100 result across 65 user-facing claims as the credit-limited MVP gate on 2026-08-02.
 
 ## 16. Current readiness
 
 - Repository: greenfield implementation on `codex/gtm-orchestrator-mvp`, freshly indexed with a persisted graph artifact.
 - Bluerose access: confirmed through the hardened SSH wrapper; Kubernetes control plane and node are healthy.
 - Protected services: Portfolio and Cloudflare Tunnel remain healthy and untouched; the Portfolio endpoint returned HTTP 200 three times during pre-deployment inspection.
-- Bluerose API contract: dedicated namespace, ClusterIP service, health probes, resource bounds, secret references, and pinned-image placeholder are locally validated.
+- Bluerose API deployment: the dedicated `gtm-agent` namespace and ClusterIP service are live behind `https://gtm-agent-api.misakirose.com` on immutable image digest `sha256:10b8d210742107a7a9b9ae5d6190624a8da2e296cb9b0aafb9be6b2e99d47804` built from commit `06c6909`; the pod is ready with zero restarts, and `/health` plus `/ready` returned HTTP 200 in three consecutive external checks on 2026-08-03.
 - Supabase account access: confirmed.
 - Existing Supabase project: unrelated and protected from reuse.
-- New Supabase MVP project: not yet created.
-- OpenAI API key: existing local key reused without exposing its value; bounded live calls remain gated by an explicit spend ceiling.
-- Canonical mobile visual baseline: approved at `docs/images/conversational-gtm-prototype.png` and locked as the implementation source of truth.
-- Foundation implementation: monorepo, locked-design client/prototype, API surface, model-aware DAG, agent/tool adapters, safe crawler, document parsers, shared contracts, Supabase migration, durable Supabase research-run and DAG-checkpoint recovery, Bluerose container/Kubernetes contract, and EAS profiles are present. The post-pivot local regression, live-local Supabase isolation/recovery lane, container smoke checks, and strict manifest validation pass.
-- Remaining release work: create and verify the dedicated Supabase project, publish a pinned container, deploy it to Bluerose, add the Cloudflare route only after internal readiness, authorize Expo/EAS, install full Xcode plus Simulator runtime, exercise live OpenAI under a spend ceiling, complete the missing onboarding/upload/export paths, and pass the full Android/iOS/deployed E2E and physical-device acceptance gates.
+- Dedicated Supabase MVP project: `gtm-agent` (`uqfkxtgdhmwcrrnbpayn`, Frankfurt) is created; remote migration, RLS, Storage, Realtime, and owner-isolation checks pass. The local Supabase workload was stopped after its integration lane.
+- OpenAI API key: the existing project key was reused without exposing its value. After the operator topped up credits, real `foodbegood.app` runs `534e3ae9-e3da-42d6-82bc-ddcee01ef8ed` and `c7689983-ac48-42a2-be64-fc7d0134e2fe` completed through the deployed API with current web research and provider-authored structured results. No additional paid rerun is required for this credit-limited MVP proof.
+- Canonical mobile visual baseline: approved at `docs/images/conversational-gtm-prototype.png`, hash-locked, and verified against the real Expo route at 390 x 844 in progress, assessment, and evidence states. Evidence is recorded in `docs/qa/` and `design-qa.md`.
+- Foundation implementation: monorepo, authenticated conversational client, seller onboarding, private document upload, comparison export, API surface, model-aware durable DAG, mandatory research-tool contract, agent/tool adapters, safe crawler, document parsers, shared contracts, Supabase persistence and recovery, Bluerose container/Kubernetes contract, and EAS profiles are present.
+- Current local evidence: a fresh 2026-08-03 run passed 242 repository tests with 9 explicitly skipped provider/integration cases, plus both native Android harness tests; typecheck, lint, and the production prototype/runtime build also passed. Earlier smoke evidence retains Expo Doctor 20/20, API 200 responses from `/health` and `/ready` under a complete smoke configuration, and a 401 response from an unauthenticated application route.
+- Android real-provider evidence: the official API 36 toolchain and ARM64 emulator are installed, and a fresh self-contained `debugOptimized` APK connected directly to the hosted HTTPS API without `adb reverse` or a local backend. The retained 2026-08-03 journey proves an empty signed-in conversation, real OpenAI acknowledgement and web-research DAG, waiting animation, a follow-up queued at position 2, automatic queue drain, dynamic source-backed Evidence, Shortlist changing the hosted opportunity to `pursue`, and both prompts plus `Shortlisted` surviving a process restart. The hosted `preserve_opportunity_decisions` migration and its production behavior regression passed before the action. The run also exposed a real provider-output projection mismatch; its failing regression test now passes, and the paid checkpoint was replayed to publish the missing objects without another OpenAI request. Retained hashes and scopes are recorded in `docs/qa/native-android/README.md`. The new-conversation path renders no seeded messages or assessment objects; Acme fixtures require an explicit non-production visual-QA state.
+- iOS real-provider evidence: Xcode 26.6 with the iOS 26.5 iPhone 17 Pro Simulator passed `testProviderBackedConversationPersistsAcrossRelaunch` with one test and zero failures. The retained recording shows the real Food Be Good conversation, model-role progress, company/ICP/evidence/opportunity objects, inspectable source URLs, and restoration after termination and relaunch; its SHA-256 is recorded in `docs/qa/native-ios/README.md`.
+- Conversation concurrency evidence: unit tests prove same-conversation FIFO and cross-conversation parallelism; local Supabase integration proves that two separate worker processes can atomically claim only the oldest prompt. Mobile tests cover the animated phase state, animated response wait state, visible queue position, and terminal removal.
+- Accuracy manifest evidence: five startup domains (Foodbegood, Langfuse, Attio, ElevenLabs, and Mission Zero Technologies), five industries, four or more stages, three or more size bands, and 40 primary-source claims pass the deterministic manifest guard.
+- Accepted live accuracy evidence: workflow `903a3962-4c2d-4dca-8f42-7daea82641e3` completed across all five startup domains. The benchmark-blind grader independently checked 65 atomic user-facing synthesis claims with mandatory web research and scored 93.85/100: 61 correct and four unverifiable, with zero citation mismatches and zero stale claims. The retained artifact is `packages/evals/results/latest-generated-claim.json`. The operator explicitly accepted this as the credit-limited MVP gate on 2026-08-02; 97/100 remains the target for later release candidates.
+- Evaluation recovery: paid live-eval state is now persisted atomically under a protocol fingerprint. An identical interrupted run resumes only unfinished DAG nodes and retains crawl/evidence artifacts; changed agent, orchestration, evaluation, or portfolio protocol sources start a clean state. Five-company final review and synthesis receive a 50-fact/8,192-output-token budget, synthesis must retain every approved claim exactly once, and the grader accepts both supported user-facing fact shapes.
+- Latest constrained rerun: workflow `477ead5f-fad5-424c-aed2-32976af8e994` completed 15 DAG nodes, including exact-source final review and synthesis, then exhausted provider credit at `portfolio-comparison`. Its failed checkpoint is retained; it is diagnostic and does not replace the accepted 93.85/100 result.
+- Recording gate: satisfied on iOS by `docs/qa/native-ios/bluerose-real-provider-e2e-final-proof-2026-08-03.mp4` and on Android by the real-provider journey, evidence-interaction, and persistence clips listed in `docs/qa/native-android/README.md`. Both are backed by hosted Bluerose/Supabase/OpenAI state; fixture-only visual-QA captures remain supplemental.
+- Post-MVP release work: the operator explicitly deferred exhaustive clean-checkout certification, extended recovery/security evidence, physical Android proof, physical iPhone proof when a device is available, and the broader twelve-journey release E2E matrix until after this focused MVP demonstration. These remain release-qualification work and are not represented as completed by the iOS proof.
 
 ## 17. Official platform references
 

@@ -1,0 +1,23 @@
+{
+  "schema": "gtm-native-provider-xcresult/v1",
+  "captured_at": "2026-08-03T00:15:43+02:00",
+  "test_plan": "GTMResearchAgentNativeE2E",
+  "test_case": "GTMResearchAgentUITests/testProviderBackedConversationPersistsAcrossRelaunch()",
+  "result": "Passed",
+  "passed_tests": 1,
+  "failed_tests": 0,
+  "skipped_tests": 0,
+  "test_duration_seconds": 133.5724869966507,
+  "device": {
+    "name": "iPhone 17 Pro",
+    "platform": "iOS Simulator",
+    "os_version": "26.5",
+    "os_build": "23F77",
+    "architecture": "arm64"
+  },
+  "recording": {
+    "path": "docs/qa/native-ios/bluerose-real-provider-e2e-final-proof-2026-08-03.mp4",
+    "duration_seconds": 195.908,
+    "sha256": "bb471ba34101dbadca3fa5d1dcb137327eabb403d3a4891561e09eaf5b83c49b"
+  }
+}

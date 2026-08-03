@@ -1,0 +1,14 @@
+{
+  "schema": "gtm-native-e2e-cleanup/v1",
+  "captured_at": "2026-08-03T00:20:00+02:00",
+  "supabase_project_id": "uqfkxtgdhmwcrrnbpayn",
+  "synthetic_user_id": "fe285a2a-8702-424a-8454-7ff51836bc24",
+  "identity_guard": "exact user id and credential-file email matched the hosted Auth user",
+  "pre_delete_lookup": "matched",
+  "delete_result": "success",
+  "post_delete_lookup": "not_found",
+  "credential_file_removed": true,
+  "xcode_scheme_credentials_present_after_cleanup": false,
+  "simulator_app_uninstalled": true,
+  "simulator_state_after_cleanup": "Shutdown"
+}

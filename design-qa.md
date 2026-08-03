@@ -1,39 +1,58 @@
 # Design QA
 
-- Source: `docs/images/conversational-gtm-prototype.png`
-- Canonical source dimensions: 1536 x 1024 px
-- Implementation viewport: protected iPhone runtime at 393 x 852 CSS px (measured 392.993 x 851.994)
-- Full implementation capture: `docs/qa/implementation-assessment-final-v3.png` (1111 x 732 px browser capture)
-- Isolated phone capture: `docs/qa/implementation-phone-final-v2.png` (330 x 680 px)
-- Full comparison: `docs/qa/assessment-comparison-final-v2.png`
-- Focused assessment-card comparison: `docs/qa/assessment-comparison-focus-v2.png`
-- State: completed company assessment for `acme.ai`
+## Evidence
 
-## Required fidelity surfaces
+- Locked visual source: `docs/images/conversational-gtm-prototype.png`
+- Locked source SHA-256: `e371e8570784a5babdc85e55fa4c75c848c350b8c78c35a49de7b1a835ea5a29`
+- Normalized comparison: `docs/qa/native-cross-platform-comparison.png`
+- Comparison SHA-256: `621ac191e3aef143665bab068c7272f3680ebd3be4ae01c4f8856e29ab881a13`
+- Comparison layout: locked reference, Android native, and iOS native; progress,
+  assessment, and evidence states; every panel normalized to 403 x 900 pixels.
+- Native source captures:
+  - Android: `docs/qa/native-android/gtm-progress.png`,
+    `gtm-assessment.png`, and `gtm-evidence.png` (1080 x 2400).
+  - iOS: `docs/qa/native-ios/gtm-progress-ios.png`,
+    `gtm-assessment-ios.png`, and `gtm-evidence-ios.png` (1206 x 2622).
 
-- iPhone frame, safe areas, Dynamic Island, header, and persistent composer
-- User analysis prompt and assistant completion bubble
-- Acme profile, ICP fit score, facts, pros, and cons
-- Support Triage Agent opportunity card and metrics
-- Evidence, Challenge, and Shortlist actions
-- Navy, blue, green, grey, typography, spacing, borders, and radii
+The locked source and all six native captures were placed in one comparison and
+inspected together. Device bezels, platform status bars, the Dynamic Island,
+and home indicators are platform-owned and excluded from app-content findings.
 
-## Iteration history
+## Findings
 
-1. Removed the hidden keyboard dock from layout so the evidence drawer renders without reserved keyboard height.
-2. Replaced approximate symbols with the closest Lucide and Expo Symbols icons for the assistant, product mark, and opportunity card.
-3. Moved the app header below the status region and verified the measured status bottom is above the header top.
-4. Wrapped the company summary to match the source, tightened card density, and preserved the visible completion timestamp above the composer.
+No unresolved P1 or P2 visual defects remain in the three canonical states.
 
-## Interaction and runtime checks
+- Progress preserves the user prompt, one agent acknowledgement/avatar, live
+  status, four Sol/Luna/Terra phases, and a moving phase-level ellipsis without
+  a redundant staged waiting bubble.
+- Assessment preserves the company profile, ICP fit, pros and cons, opportunity
+  hierarchy, value/effort/fit labels, and the three canonical actions.
+- Evidence preserves the modal sheet hierarchy, source links, fact/inference
+  classifications, confidence indicators, close affordance, and persistent
+  composer.
+- Header, composer, navy/blue/green semantic colors, borders, radii, typography
+  hierarchy, iconography, and major spacing relationships match the locked
+  reference within normal Android/iOS font-rasterization differences.
+- The implementation uses platform icon libraries and supplied app assets; no
+  visible placeholder, emoji substitute, CSS drawing, or handcrafted asset was
+  found.
 
-- Automatic research progress advances into the completed assessment state.
-- Evidence opens and closes the evidence collection sheet.
-- Shortlist changes state and remains visibly selected.
-- The conversational composer remains available throughout the primary flow.
-- Browser console inspection showed no errors or warnings in the verified run.
-- Prototype runtime integrity check passes for all 28 protected files.
+## Primary interactions checked
 
-## Result
+- Evidence opens and closes.
+- Composer remains present in all three canonical states.
+- Debug panel opens and closes in development builds and is intentionally
+  absent from the canonical fixture captures.
+- Mobile tests cover empty/new conversation, multi-turn follow-up, animated
+  waiting, FIFO queue position, live interactive objects, actions, export, and
+  document attachment.
+- The deterministic visual fixture is development-only and does not replace the
+  provider-backed conversation runtime or its retained native recordings.
 
-passed
+## Superseded evidence
+
+The older `docs/qa/all-states-comparison.png` used Expo captures with an
+unretained scale factor. It remains historical evidence only. The normalized
+native cross-platform comparison above is authoritative for this pass.
+
+final result: passed

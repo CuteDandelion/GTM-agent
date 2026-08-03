@@ -1,0 +1,101 @@
+{
+  "version": "real-world-v1-2026-08-02",
+  "minimumScore": 97,
+  "samples": [
+    {
+      "id": "foodbegood-2026-08",
+      "company": "Foodbegood",
+      "domain": "foodbegood.app",
+      "industry": "food waste and community meal access",
+      "stage": "early-stage-private",
+      "sizeBand": "micro",
+      "requiredTools": ["web_search", "crawl_company", "save_evidence", "get_claim_sources", "code_interpreter"],
+      "claims": [
+        { "id": "foodbegood-c1", "statement": "Foodbegood identifies its legal entity as Foodbegood UG (haftungsbeschränkt) i.G.", "weight": 1, "sourceUrl": "https://www.foodbegood.app/impressum.html", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "foodbegood-c2", "statement": "Foodbegood identifies Alice Warkentin as its CEO and authorized managing representative.", "weight": 1, "sourceUrl": "https://www.foodbegood.app/impressum.html", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "foodbegood-c3", "statement": "Foodbegood lists Spreeinsel 6, 15848 Beeskow, Germany as its business address.", "weight": 1, "sourceUrl": "https://www.foodbegood.app/impressum.html", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "foodbegood-c4", "statement": "Foodbegood says its business purpose includes digital and sustainable services that reduce food waste.", "weight": 1, "sourceUrl": "https://www.foodbegood.app/impressum.html", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "foodbegood-c5", "statement": "Foodbegood describes a service that redirects participating canteens' surplus meals to subscribers for pickup.", "weight": 1, "sourceUrl": "https://www.foodbegood.app/", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "foodbegood-c6", "statement": "Foodbegood says participating users bring a reusable container and collect meals at a fixed pickup time.", "weight": 1, "sourceUrl": "https://www.foodbegood.app/", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "foodbegood-c7", "statement": "Foodbegood says onboarding participating canteen personnel takes no more than 30 minutes.", "weight": 1, "sourceUrl": "https://www.foodbegood.app/", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "foodbegood-c8", "statement": "Foodbegood says canteens can adjust the number of available meals in real time.", "weight": 1, "sourceUrl": "https://www.foodbegood.app/", "verifiedAt": "2026-08-02T00:00:00.000Z" }
+      ]
+    },
+    {
+      "id": "langfuse-2026-08",
+      "company": "Langfuse",
+      "domain": "langfuse.com",
+      "industry": "LLM engineering and observability",
+      "stage": "seed",
+      "sizeBand": "small",
+      "requiredTools": ["web_search", "crawl_company", "save_evidence", "get_claim_sources", "code_interpreter"],
+      "claims": [
+        { "id": "langfuse-c1", "statement": "Langfuse announced a $4 million seed round.", "weight": 1, "sourceUrl": "https://langfuse.com/blog/announcing-our-seed-round", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "langfuse-c2", "statement": "Langfuse named Lightspeed Venture Partners, La Famiglia, Y Combinator, and angel investors as seed backers.", "weight": 1, "sourceUrl": "https://langfuse.com/blog/announcing-our-seed-round", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "langfuse-c3", "statement": "Langfuse describes its product as an open-source observability and product-analytics platform for LLM applications.", "weight": 1, "sourceUrl": "https://langfuse.com/blog/announcing-our-seed-round", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "langfuse-c4", "statement": "The Langfuse founders participated in Y Combinator's Winter 2023 batch.", "weight": 1, "sourceUrl": "https://langfuse.com/blog/announcing-our-seed-round", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "langfuse-c5", "statement": "Before Langfuse, the founders explored web-scraping and educational LLM application ideas.", "weight": 1, "sourceUrl": "https://langfuse.com/blog/announcing-our-seed-round", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "langfuse-c6", "statement": "Langfuse says its first version focused on logging, debugging, and analyzing LLM application data.", "weight": 1, "sourceUrl": "https://langfuse.com/blog/announcing-our-seed-round", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "langfuse-c7", "statement": "Langfuse open-sourced the project and launched it on Product Hunt in August 2023.", "weight": 1, "sourceUrl": "https://langfuse.com/blog/announcing-our-seed-round", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "langfuse-c8", "statement": "Langfuse says its SDKs, integrations, and application are MIT licensed and can be self-hosted.", "weight": 1, "sourceUrl": "https://langfuse.com/handbook/chapters/open-source", "verifiedAt": "2026-08-02T00:00:00.000Z" }
+      ]
+    },
+    {
+      "id": "attio-2026-08",
+      "company": "Attio",
+      "domain": "attio.com",
+      "industry": "customer relationship management",
+      "stage": "growth-stage-private",
+      "sizeBand": "medium",
+      "requiredTools": ["web_search", "crawl_company", "save_evidence", "get_claim_sources", "code_interpreter"],
+      "claims": [
+        { "id": "attio-c1", "statement": "Attio announced that it raised $33 million in funding.", "weight": 1, "sourceUrl": "https://attio.com/blog/attio-raises-33-million-in-funding", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "attio-c2", "statement": "Attio named Redpoint Ventures, Balderton Capital, Point Nine, and 01 Advisors among the investors in the round.", "weight": 1, "sourceUrl": "https://attio.com/blog/attio-raises-33-million-in-funding", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "attio-c3", "statement": "Attio says it publicly launched its CRM in March 2023.", "weight": 1, "sourceUrl": "https://attio.com/blog/attio-raises-33-million-in-funding", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "attio-c4", "statement": "Attio's stated vision is to build the CRM for the next generation of companies.", "weight": 1, "sourceUrl": "https://attio.com/blog/attio-raises-33-million-in-funding", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "attio-c5", "statement": "Attio describes its foundation as an AI-native data model.", "weight": 1, "sourceUrl": "https://attio.com/blog/attio-raises-33-million-in-funding", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "attio-c6", "statement": "Attio says its data model can process millions of records in under 50 milliseconds.", "weight": 1, "sourceUrl": "https://attio.com/blog/attio-raises-33-million-in-funding", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "attio-c7", "statement": "Attio describes CRM as evolving from a system of record into a system of context.", "weight": 1, "sourceUrl": "https://attio.com/blog/attio-raises-33-million-in-funding", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "attio-c8", "statement": "Attio says the CRM should become a system of action in which proactive agents can execute work.", "weight": 1, "sourceUrl": "https://attio.com/blog/attio-raises-33-million-in-funding", "verifiedAt": "2026-08-02T00:00:00.000Z" }
+      ]
+    },
+    {
+      "id": "elevenlabs-2026-08",
+      "company": "ElevenLabs",
+      "domain": "elevenlabs.io",
+      "industry": "voice AI and conversational agents",
+      "stage": "series-d",
+      "sizeBand": "large",
+      "requiredTools": ["web_search", "crawl_company", "save_evidence", "get_claim_sources", "code_interpreter"],
+      "claims": [
+        { "id": "elevenlabs-c1", "statement": "ElevenLabs reported surpassing $500 million in annual recurring revenue during the first four months of 2026.", "weight": 1, "sourceUrl": "https://elevenlabs.io/blog/500m-arr-and-new-investors", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "elevenlabs-c2", "statement": "ElevenLabs reported ending 2025 with $350 million in annual recurring revenue.", "weight": 1, "sourceUrl": "https://elevenlabs.io/blog/500m-arr-and-new-investors", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "elevenlabs-c3", "statement": "ElevenLabs described the 2026 financing as the third and final close of its Series D.", "weight": 1, "sourceUrl": "https://elevenlabs.io/blog/500m-arr-and-new-investors", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "elevenlabs-c4", "statement": "ElevenLabs named BlackRock, Wellington, NVIDIA, and Santander among the new Series D investors.", "weight": 1, "sourceUrl": "https://elevenlabs.io/blog/500m-arr-and-new-investors", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "elevenlabs-c5", "statement": "ElevenLabs says voice-agent adoption is growing in customer service, sales, marketing, and education.", "weight": 1, "sourceUrl": "https://elevenlabs.io/blog/500m-arr-and-new-investors", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "elevenlabs-c6", "statement": "ElevenLabs announced a $100 million employee tender offer.", "weight": 1, "sourceUrl": "https://elevenlabs.io/blog/500m-arr-and-new-investors", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "elevenlabs-c7", "statement": "ElevenLabs reported a team of 530 people across more than 50 countries.", "weight": 1, "sourceUrl": "https://elevenlabs.io/blog/500m-arr-and-new-investors", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "elevenlabs-c8", "statement": "ElevenLabs says its agents can operate across voice, chat, and email.", "weight": 1, "sourceUrl": "https://elevenlabs.io/blog/500m-arr-and-new-investors", "verifiedAt": "2026-08-02T00:00:00.000Z" }
+      ]
+    },
+    {
+      "id": "missionzero-2026-08",
+      "company": "Mission Zero Technologies",
+      "domain": "www.missionzero.tech",
+      "industry": "direct air carbon capture",
+      "stage": "series-a",
+      "sizeBand": "small",
+      "requiredTools": ["web_search", "crawl_company", "save_evidence", "get_claim_sources", "code_interpreter"],
+      "claims": [
+        { "id": "missionzero-c1", "statement": "Mission Zero says it was founded in 2020.", "weight": 1, "sourceUrl": "https://www.missionzero.tech/lab-notes/21-8m-series-a", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "missionzero-c2", "statement": "Mission Zero says its first commercial direct-air-capture plant began operating in December 2023 at 50 tonnes per year.", "weight": 1, "sourceUrl": "https://www.missionzero.tech/lab-notes/21-8m-series-a", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "missionzero-c3", "statement": "Mission Zero said it planned to deploy two systems with 250-tonne-per-year capacity in 2025.", "weight": 1, "sourceUrl": "https://www.missionzero.tech/lab-notes/21-8m-series-a", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "missionzero-c4", "statement": "Mission Zero announced a £21.8 million Series A round.", "weight": 1, "sourceUrl": "https://www.missionzero.tech/lab-notes/21-8m-series-a", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "missionzero-c5", "statement": "Mission Zero named 2150, World Fund, Fortescue, Breakthrough Energy Ventures, and Anglo American among its Series A backers.", "weight": 1, "sourceUrl": "https://www.missionzero.tech/lab-notes/21-8m-series-a", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "missionzero-c6", "statement": "Mission Zero says it aims to reach megatonne annual carbon-removal capacity by the end of the decade.", "weight": 1, "sourceUrl": "https://www.missionzero.tech/lab-notes/scaling-direct-air-capture", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "missionzero-c7", "statement": "Mission Zero says it moved from concept to commercial direct-air-capture deployment in three years.", "weight": 1, "sourceUrl": "https://www.missionzero.tech/lab-notes/learnings-deploying-direct-air-capture", "verifiedAt": "2026-08-02T00:00:00.000Z" },
+        { "id": "missionzero-c8", "statement": "Mission Zero describes its technology as a heat-free electrochemical direct-air-capture process.", "weight": 1, "sourceUrl": "https://www.missionzero.tech/direct-air-capture", "verifiedAt": "2026-08-02T00:00:00.000Z" }
+      ]
+    }
+  ]
+}

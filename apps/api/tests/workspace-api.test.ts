@@ -27,6 +27,7 @@ describe("seller workspace API", () => {
           : undefined;
       },
       async createConversation() { throw new Error("not used"); },
+      async listConversations() { return []; },
       async getConversation() { return undefined; },
       async appendMessage() { return undefined; },
       async listMessages() { return undefined; },
@@ -39,6 +40,15 @@ describe("seller workspace API", () => {
           : undefined,
       },
       workspaceService,
+      conversationAgent: {
+        decide: async () => ({
+          kind: "research" as const,
+          message: "I’ll verify the company and assess the opportunity.",
+          domains: ["acme.ai"],
+          plan: { objective: "Assess Acme", capabilities: ["company_profile", "current_web", "opportunity_analysis"] },
+          usedTools: [],
+        }),
+      },
     });
     servers.push(server);
     const origin = await server.listen({ host: "127.0.0.1", port: 0 });
@@ -82,6 +92,9 @@ describe("seller workspace API", () => {
         messages.set(conversationId, []);
         return conversation;
       },
+      async listConversations(ownerId: string) {
+        return [...conversations.values()].filter((conversation) => conversation.ownerId === ownerId);
+      },
       async getConversation(ownerId: string, id: string) {
         const conversation = conversations.get(id);
         return conversation?.ownerId === ownerId ? conversation : undefined;
@@ -89,8 +102,19 @@ describe("seller workspace API", () => {
       async appendMessage(ownerId: string, id: string, input: { role: string; content: unknown }) {
         const conversation = conversations.get(id);
         if (conversation?.ownerId !== ownerId) return undefined;
-        const message = { id: "44444444-4444-4444-8444-444444444444", ownerId, conversationId: id, ...input, sequence: 1 };
-        messages.get(id)?.push(message);
+        const conversationMessages = messages.get(id) ?? [];
+        const sequence = conversationMessages.length + 1;
+        const message = {
+          id: sequence === 1
+            ? "44444444-4444-4444-8444-444444444444"
+            : "55555555-5555-4555-8555-555555555555",
+          ownerId,
+          conversationId: id,
+          ...input,
+          sequence,
+        };
+        conversationMessages.push(message);
+        messages.set(id, conversationMessages);
         return message;
       },
       async listMessages(ownerId: string, id: string) {
@@ -108,6 +132,15 @@ describe("seller workspace API", () => {
         cancelRun: async () => undefined,
         resumeRun: async () => undefined,
       },
+      conversationAgent: {
+        decide: async () => ({
+          kind: "research" as const,
+          message: "I’ll verify the company and assess the opportunity.",
+          domains: ["acme.ai"],
+          plan: { objective: "Assess Acme", capabilities: ["company_profile", "current_web", "opportunity_analysis"] },
+          usedTools: [],
+        }),
+      },
     });
     servers.push(server);
     const origin = await server.listen({ host: "127.0.0.1", port: 0 });
@@ -124,13 +157,26 @@ describe("seller workspace API", () => {
       body: JSON.stringify({ message: "Analyze acme.ai", domains: ["acme.ai"] }),
     });
     const restored = await fetch(`${origin}/api/v1/conversations/${conversationId}/messages`, { headers });
+    const listed = await fetch(`${origin}/api/v1/conversations`, { headers });
 
     expect(created.status).toBe(201);
     expect(await created.json()).toMatchObject({ id: conversationId, title: "Acme opportunity research" });
     expect(submitted.status).toBe(202);
+    expect(listed.status).toBe(200);
+    expect(await listed.json()).toEqual([expect.objectContaining({ id: conversationId })]);
     expect(restored.status).toBe(200);
     expect(await restored.json()).toEqual([
       expect.objectContaining({ role: "user", content: { text: "Analyze acme.ai", domains: ["acme.ai"], documentIds: [] }, sequence: 1 }),
+      expect.objectContaining({
+        role: "assistant",
+        content: expect.objectContaining({
+          text: "I’ll verify the company and assess the opportunity.",
+          runId: "run-1",
+          status: "queued",
+          queuePosition: 1,
+        }),
+        sequence: 2,
+      }),
     ]);
   });
 });

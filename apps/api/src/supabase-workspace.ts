@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import type { WorkspaceService } from "./server.js";
+import { createSupabaseFetch } from "./supabase-fetch.js";
 
 type SellerProfileRow = {
   id: string;
@@ -122,6 +123,16 @@ export function createSupabaseWorkspaceService(client: SupabaseClient): Workspac
       if (result.error) throw new Error(`Unable to create conversation: ${result.error.message}`);
       return mapConversation(result.data as ConversationRow);
     },
+    async listConversations(ownerId) {
+      const result = await client
+        .from("conversations")
+        .select(conversationColumns)
+        .eq("owner_id", ownerId)
+        .eq("status", "active")
+        .order("updated_at", { ascending: false });
+      if (result.error) throw new Error(`Unable to list conversations: ${result.error.message}`);
+      return (result.data as ConversationRow[]).map(mapConversation);
+    },
     async getConversation(ownerId, conversationId) {
       const result = await client
         .from("conversations")
@@ -169,5 +180,6 @@ export function createEnvironmentWorkspaceService(
   if (!url || !secretKey) return undefined;
   return createSupabaseWorkspaceService(createClient(url, secretKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { fetch: createSupabaseFetch() },
   }));
 }

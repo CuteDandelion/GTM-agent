@@ -79,6 +79,9 @@ describe("Supabase workspace persistence", () => {
           id: conversation.id,
           title: "Acme opportunity research",
         });
+        expect(await service.listConversations(ownerId!)).toEqual([
+          expect.objectContaining({ id: conversation.id, title: "Acme opportunity research" }),
+        ]);
         expect(restoredMessages.map(({ role, content }) => ({ role, text: content.text }))).toEqual([
           { role: "user", text: "Analyze acme.ai" },
           { role: "assistant", text: "Research started" },
@@ -256,6 +259,15 @@ describe("Supabase workspace persistence", () => {
           logger: false,
           authService,
           researchService,
+          conversationAgent: {
+            decide: async () => ({
+              kind: "research" as const,
+              message: "I’ll verify the company and assess the opportunity.",
+              domains: ["acme.ai"],
+              plan: { objective: "Assess Acme", capabilities: ["company_profile", "current_web", "opportunity_analysis"] },
+              usedTools: [],
+            }),
+          },
           workspaceService: createSupabaseWorkspaceService(admin),
         });
         server = makeServer();
@@ -293,6 +305,15 @@ describe("Supabase workspace persistence", () => {
         expect(restored.status).toBe(200);
         expect(await restored.json()).toEqual([
           expect.objectContaining({ role: "user", content: expect.objectContaining({ text: "Analyze acme.ai" }) }),
+          expect.objectContaining({
+            role: "assistant",
+            content: expect.objectContaining({
+              text: "I’ll verify the company and assess the opportunity.",
+              runId: "run-local-1",
+              status: "queued",
+              queuePosition: 1,
+            }),
+          }),
         ]);
       } finally {
         await server?.close();
