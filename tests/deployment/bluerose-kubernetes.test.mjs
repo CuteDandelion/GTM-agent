@@ -14,7 +14,10 @@ test("the Bluerose deployment is isolated and exposes only a ClusterIP service",
 });
 
 test("the API has rollout, resource, and health protections", () => {
-  assert.match(deployment, /image:\s*ghcr\.io\/cutedandelion\/gtm-agent-api@sha256:[a-f0-9]{64}/);
+  assert.match(
+    deployment,
+    /image:\s*ghcr\.io\/cutedandelion\/gtm-agent-api@sha256:ae01c121262a7dbbe6aa6ca4912a42f88199f21e6befcc54a48b1e96855135c6/,
+  );
   assert.doesNotMatch(deployment, /REPLACE_WITH_COMMIT_SHA/);
   assert.doesNotMatch(deployment, /image:[^\n]*:latest/);
   assert.match(deployment, /readinessProbe:[\s\S]*path:\s*\/ready/);

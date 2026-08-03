@@ -3,7 +3,7 @@ name: Publish API image
 on:
   push:
     branches:
-      - codex/gtm-orchestrator-mvp
+      - main
   workflow_dispatch:
 
 permissions:
