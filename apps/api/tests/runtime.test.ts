@@ -17,7 +17,7 @@ describe("research runtime assembly", () => {
     }));
     const scheduler = createResearchScheduler({
       agentRuntime: runtime,
-      availableModels: new Set(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]),
+      availableModels: new Set(["opencode-go/minimax-m3", "opencode-go/gpt-5.6-luna", "opencode-go/minimax-m3"]),
       checkpointStore: new InMemoryCheckpointStore(),
       deterministicTools: {
         validate_domain: validateDomain,
@@ -37,16 +37,15 @@ describe("research runtime assembly", () => {
     expect(validateDomain).toHaveBeenCalledOnce();
     expect(crawlCompany).toHaveBeenCalledOnce();
     expect(runtime).toHaveBeenCalled();
-    expect(runtime).toHaveBeenCalledWith(expect.objectContaining({ model: "gpt-5.6-sol" }));
-    expect(runtime).toHaveBeenCalledWith(expect.objectContaining({ model: "gpt-5.6-luna" }));
-    expect(runtime).toHaveBeenCalledWith(expect.objectContaining({ model: "gpt-5.6-terra" }));
+    expect(runtime).toHaveBeenCalledWith(expect.objectContaining({ model: "opencode-go/minimax-m3" }));
+    expect(runtime).toHaveBeenCalledWith(expect.objectContaining({ model: "opencode-go/gpt-5.6-luna" }));
   });
 
   it("fails closed when a deterministic tool is not registered", async () => {
     const runtime: AgentRuntime = vi.fn(async (request) => ({ output: {}, usedTools: request.tools }));
     const scheduler = createResearchScheduler({
       agentRuntime: runtime,
-      availableModels: new Set(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]),
+      availableModels: new Set(["opencode-go/minimax-m3", "opencode-go/gpt-5.6-luna", "opencode-go/minimax-m3"]),
       checkpointStore: new InMemoryCheckpointStore(),
       deterministicTools: {},
     });

@@ -24,14 +24,14 @@ function context(
   };
 }
 
-describe("OpenAI specialist node executor", () => {
+describe("specialist node executor", () => {
   it("keeps the product default while allowing a bounded evaluator output budget", () => {
     expect(resolveMaxOutputTokens()).toBe(4_096);
     expect(resolveMaxOutputTokens(8_192)).toBe(8_192);
     expect(() => resolveMaxOutputTokens(32_768)).toThrow("maxOutputTokens must be between 1 and 16384");
   });
 
-  it("routes a Luna extraction node with only its scoped tools", async () => {
+  it("routes a fast extraction node with only its scoped tools", async () => {
     const runtime: AgentRuntime = vi.fn(async () => ({
       output: { facts: ["Acme automates support"] },
       usedTools: ["web_search", "save_evidence"],
@@ -40,7 +40,7 @@ describe("OpenAI specialist node executor", () => {
     const useTool = vi.fn();
     const executor = createAgentNodeExecutor({
       registry: createModelRegistry(),
-      availableModels: new Set(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]),
+      availableModels: new Set(createModelRegistry().models),
       runtime,
     });
 
@@ -55,7 +55,7 @@ describe("OpenAI specialist node executor", () => {
     }, useTool));
 
     expect(runtime).toHaveBeenCalledWith(expect.objectContaining({
-      model: "gpt-5.6-luna",
+      model: "opencode-go/gpt-5.6-luna",
       reasoningEffort: "low",
       tools: ["web_search", "save_evidence"],
       instructions: expect.stringContaining("Return exactly one valid JSON object"),
@@ -75,7 +75,7 @@ describe("OpenAI specialist node executor", () => {
     const runtime: AgentRuntime = vi.fn(async () => ({ output: { approvedClaims: [] }, usedTools: ["get_claim_sources", "web_search"] }));
     const executor = createAgentNodeExecutor({
       registry: createModelRegistry(),
-      availableModels: new Set(["gpt-5.6-sol", "gpt-5.6-terra"]),
+      availableModels: new Set(createModelRegistry().models),
       runtime,
     });
 
@@ -124,7 +124,7 @@ describe("OpenAI specialist node executor", () => {
     }));
     const executor = createAgentNodeExecutor({
       registry: createModelRegistry(),
-      availableModels: new Set(["gpt-5.6-sol", "gpt-5.6-terra"]),
+      availableModels: new Set(createModelRegistry().models),
       runtime,
     });
     const workflowInput = { domains: ["one.example", "two.example", "three.example", "four.example", "five.example"] };
@@ -166,7 +166,7 @@ describe("OpenAI specialist node executor", () => {
     }));
     const executor = createAgentNodeExecutor({
       registry: createModelRegistry(),
-      availableModels: new Set(["gpt-5.6-terra"]),
+      availableModels: new Set(["opencode-go/minimax-m3"]),
       runtime,
     });
     const synthesisContext = context({
@@ -183,11 +183,11 @@ describe("OpenAI specialist node executor", () => {
     await expect(executor(synthesisContext)).rejects.toThrow(/include every approved claim exactly once/i);
   });
 
-  it("will not silently run a Sol critic on Terra", async () => {
+  it("will not silently run a critic without an approved critic model", async () => {
     const runtime: AgentRuntime = vi.fn();
     const executor = createAgentNodeExecutor({
       registry: createModelRegistry(),
-      availableModels: new Set(["gpt-5.6-terra"]),
+      availableModels: new Set(["opencode-go/qwen3.7-plus"]),
       runtime,
     });
 
@@ -207,7 +207,7 @@ describe("OpenAI specialist node executor", () => {
     const runtime: AgentRuntime = vi.fn();
     const executor = createAgentNodeExecutor({
       registry: createModelRegistry(),
-      availableModels: new Set(["gpt-5.6-sol"]),
+      availableModels: new Set(["opencode-go/minimax-m3"]),
       runtime,
     });
 
@@ -227,7 +227,7 @@ describe("OpenAI specialist node executor", () => {
     const runtime: AgentRuntime = vi.fn(async () => ({ output: "not structured data", usedTools: [] }));
     const executor = createAgentNodeExecutor({
       registry: createModelRegistry(),
-      availableModels: new Set(["gpt-5.6-sol"]),
+      availableModels: new Set(["opencode-go/minimax-m3"]),
       runtime,
     });
 
@@ -246,7 +246,7 @@ describe("OpenAI specialist node executor", () => {
     const runtime: AgentRuntime = vi.fn(async () => ({ output: "```json\n{\"facts\":[\"grounded\"]}\n```", usedTools: [] }));
     const executor = createAgentNodeExecutor({
       registry: createModelRegistry(),
-      availableModels: new Set(["gpt-5.6-sol"]),
+      availableModels: new Set(["opencode-go/minimax-m3"]),
       runtime,
     });
 

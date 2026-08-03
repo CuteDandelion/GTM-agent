@@ -1,8 +1,6 @@
 import { lookup } from "node:dns/promises";
 
 import {
-  createFunctionToolAdapters,
-  createOpenAIAgentsRuntime,
   type AgentRuntime,
   type FunctionToolAdapterDefinition,
   type ToolRunContext,
@@ -37,13 +35,15 @@ import { createConversationAgent } from "./conversation-agent.js";
 
 export { createProjectingCheckpointStore, createRunProjectionObserver };
 
-export function createApplicationConversationAgent() {
+const availableOpenCodeModels = new Set([
+  "opencode-go/minimax-m3",
+  "opencode-go/gpt-5.6-luna",
+]);
+
+export function createApplicationConversationAgent(runtime: AgentRuntime) {
   return createConversationAgent({
-    runtime: createOpenAIAgentsRuntime({
-      vectorStoreIds: (process.env.OPENAI_VECTOR_STORE_IDS ?? "").split(",").map((id) => id.trim()).filter(Boolean),
-      maxTurns: 8,
-    }),
-    availableModels: new Set(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]),
+    runtime,
+    availableModels: availableOpenCodeModels,
   });
 }
 
@@ -279,11 +279,9 @@ export function createApplicationResearchService(options: {
   };
   const agentRuntime = options.createAgentRuntime
     ? options.createAgentRuntime(toolDefinitions)
-    : createOpenAIAgentsRuntime({
-        customTools: createFunctionToolAdapters(toolDefinitions),
-        vectorStoreIds: (process.env.OPENAI_VECTOR_STORE_IDS ?? "").split(",").map((id) => id.trim()).filter(Boolean),
-        maxTurns: 6,
-      });
+    : async () => {
+        throw new Error("No agent runtime is configured for research");
+      };
   const runStore = persistence?.runStore ?? new InMemoryResearchRunStore();
   const projectionObserver = options.interactiveObjectService
     ? createRunProjectionObserver(options.interactiveObjectService)
@@ -298,7 +296,7 @@ export function createApplicationResearchService(options: {
     : durableCheckpointStore;
   const scheduler = createResearchScheduler({
     agentRuntime,
-    availableModels: new Set(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]),
+    availableModels: availableOpenCodeModels,
     checkpointStore,
     deterministicTools: createDeterministicDomainTools({
       artifactStore,

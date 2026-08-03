@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
-import { createOpenAIAgentsRuntime } from "@gtm/agents";
+import { createOpenCodeRuntime, startOpenCodeAgentService, type AgentRuntime } from "@gtm/agents";
 import {
   evaluateAccuracyRun,
   validateAccuracyDecisions,
@@ -70,7 +71,7 @@ function retryDelayMs(error: unknown) {
 }
 
 async function gradeSample(
-  runtime: ReturnType<typeof createOpenAIAgentsRuntime>,
+  runtime: AgentRuntime,
   sample: AccuracySample,
   systemEvidence: unknown[],
 ) {
@@ -80,7 +81,7 @@ async function gradeSample(
       const response = await runtime({
         agentName: "Independent GTM accuracy grader",
         instructions: "Independently grade the supplied system evidence against every atomic benchmark claim. You MUST call web_search and verify against the claim's primary source URL. Mark a claim correct only when (1) the SYSTEM_EVIDENCE explicitly asserts that claim or a semantically equivalent fact and (2) independent source research confirms it. Evaluate dated or 'when verified' claims at the claim's verifiedAt timestamp: later-changing live dashboard values do not make an accurately observed historical value stale. If the source confirms a fact that the system did not assert, mark it unverifiable. Use contradicted for an opposing assertion, stale only when newer evidence invalidates a claim that was intended to be current, and citation_mismatch when the asserted fact cannot be tied to the specified primary source. Never infer missing coverage. Return exactly one JSON object with a decisions array and no prose. Include one decision for every supplied claim, preserve sampleId and claimId exactly, and include the exact verified primary source URL in citationUrls only when checked.",
-        model: "gpt-5.6-sol",
+        model: "opencode-go/minimax-m3",
         reasoningEffort: "high",
         tools: ["web_search"],
         requiredTools: ["web_search"],
@@ -127,14 +128,18 @@ async function gradeSample(
 }
 
 async function main() {
-  if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is required for independent live grading");
+  if (!process.env.OPENCODE_KEY) throw new Error("OPENCODE_KEY is required for independent live grading");
+  const openCode = await startOpenCodeAgentService({
+    directory: fileURLToPath(new URL("../apps/api/", import.meta.url)),
+  });
+  try {
   const manifest = validateAccuracyManifest(JSON.parse(await readFile(manifestUrl, "utf8")));
   const raw = JSON.parse(await readFile(rawResultUrl, "utf8")) as RawEvaluationArtifact;
   if (raw.status !== "raw_requires_independent_grading") {
     throw new Error(`Raw evaluation is not gradeable: ${raw.status}`);
   }
 
-  const runtime = createOpenAIAgentsRuntime({ maxTurns: 8 });
+  const runtime = createOpenCodeRuntime({ transport: openCode.transport, bridge: openCode.bridge });
   const decisions: AccuracyDecision[] = [];
   const graderToolTraces: AccuracyToolTrace[] = [];
   for (const sample of manifest.samples) {
@@ -170,6 +175,9 @@ async function main() {
     result: "packages/evals/results/latest.json",
   }, null, 2));
   if (!evaluation.accepted) process.exitCode = 1;
+  } finally {
+    await openCode.close();
+  }
 }
 
 main().catch((error) => {

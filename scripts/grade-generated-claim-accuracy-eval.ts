@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
-import { createOpenAIAgentsRuntime } from "@gtm/agents";
+import { createOpenCodeRuntime, startOpenCodeAgentService, type AgentRuntime } from "@gtm/agents";
 import {
   evaluateGeneratedClaimAccuracy,
   extractUserFacingFactsFromCheckpoint,
@@ -73,7 +74,7 @@ function retryDelayMs(error: unknown) {
 }
 
 async function gradeGeneratedClaims(
-  runtime: ReturnType<typeof createOpenAIAgentsRuntime>,
+  runtime: AgentRuntime,
   sample: AccuracySample,
   systemEvidence: unknown[],
   batchNumber: number,
@@ -84,7 +85,7 @@ async function gradeGeneratedClaims(
       const response = await runtime({
         agentName: "Independent generated-claim accuracy grader",
         instructions: "Grade only factual claims that the product actually emitted in SYSTEM_EVIDENCE. You do not have benchmark answers. Split every compound factual statement into all of its atomic claims without adding facts, changing meaning, or omitting a factual clause. Exclude recommendations, hypotheses, fit scores, subjective assessments, risks, and statements that merely say information was not found. Produce at least four atomic decisions when the supplied evidence contains enough factual assertions; never invent a claim to reach a count. For each atomic claim, preserve the exact source URL asserted by the product as sourceUrl, call web_search, inspect that primary source, and independently decide whether the source establishes the statement. Mark correct only when the source supports the complete atomic statement. Use contradicted for opposing evidence, unverifiable when the source does not establish it, stale when newer primary evidence invalidates a current claim, and citation_mismatch when the asserted URL is not the source that supports it. citationUrls must contain only primary URLs you actually checked. Keep every statement and rationale concise. Return exactly one JSON object with a decisions array and no prose. Use the supplied sample id exactly and stable claim ids in the form SAMPLE_ID-batch-BATCH_NUMBER-output-N.",
-        model: "gpt-5.6-sol",
+        model: "opencode-go/minimax-m3",
         reasoningEffort: "high",
         maxOutputTokens: 8_192,
         tools: ["web_search"],
@@ -125,14 +126,18 @@ async function gradeGeneratedClaims(
 }
 
 async function main() {
-  if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is required for generated-claim grading");
+  if (!process.env.OPENCODE_KEY) throw new Error("OPENCODE_KEY is required for generated-claim grading");
+  const openCode = await startOpenCodeAgentService({
+    directory: fileURLToPath(new URL("../apps/api/", import.meta.url)),
+  });
+  try {
   const manifest = validateAccuracyManifest(JSON.parse(await readFile(manifestUrl, "utf8")));
   const raw = JSON.parse(await readFile(rawResultUrl, "utf8")) as RawEvaluationArtifact;
   if (raw.status !== "raw_requires_independent_grading") {
     throw new Error(`Raw evaluation is not gradeable: ${raw.status}`);
   }
 
-  const runtime = createOpenAIAgentsRuntime({ maxTurns: 8 });
+  const runtime = createOpenCodeRuntime({ transport: openCode.transport, bridge: openCode.bridge });
   const decisions: GeneratedClaimDecision[] = [];
   const graderToolTraces: AccuracyToolTrace[] = [];
   const userFacingFacts = extractUserFacingFactsFromCheckpoint(raw.nodes);
@@ -173,6 +178,9 @@ async function main() {
     benchmarkCoverageReference: "packages/evals/results/latest.json",
   }, null, 2));
   if (!evaluation.accepted) process.exitCode = 1;
+  } finally {
+    await openCode.close();
+  }
 }
 
 main().catch((error) => {

@@ -129,32 +129,31 @@ The model registry is configuration, not scattered hardcoded strings.
 
 | Role | Preferred model | Primary responsibility |
 |---|---|---|
-| Planner | `gpt-5.6-sol` | Interpret intent, design the research DAG, define completion criteria |
-| Executor | `gpt-5.6-luna` | High-volume extraction, classification, normalization, bounded tool tasks |
-| Analyst | `gpt-5.6-terra` | Company profiling, ICP scoring, opportunity reasoning |
-| Conversation manager | `gpt-5.6-terra` | Follow-ups, corrections, ordinary synthesis |
-| Critic | `gpt-5.6-sol` | Challenge claims, reconcile conflicts, validate the final dossier |
-| Portfolio strategist | `gpt-5.6-sol` | Compare and rank the most important targets in a batch |
+| Planner | `opencode-go/minimax-m3` | Interpret intent, design the research DAG, define completion criteria |
+| Executor | `opencode-go/gpt-5.6-luna` | High-volume extraction, classification, normalization, bounded tool tasks |
+| Analyst | `opencode-go/minimax-m3` | Company profiling, ICP scoring, opportunity reasoning |
+| Conversation manager | `opencode-go/gpt-5.6-luna` | Follow-ups, corrections, ordinary synthesis |
+| Critic | `opencode-go/minimax-m3` | Challenge claims, reconcile conflicts, validate the final dossier |
+| Portfolio strategist | `opencode-go/minimax-m3` | Compare and rank the most important targets in a batch |
 
 Default routing configuration:
 
 ```text
-MODEL_PLANNER=gpt-5.6-sol
-MODEL_EXECUTOR=gpt-5.6-luna
-MODEL_ANALYST=gpt-5.6-terra
-MODEL_CRITIC=gpt-5.6-sol
-MODEL_CONVERSATION=gpt-5.6-terra
+MODEL_PLANNER=opencode-go/minimax-m3
+MODEL_EXECUTOR=opencode-go/gpt-5.6-luna
+MODEL_ANALYST=opencode-go/minimax-m3
+MODEL_CRITIC=opencode-go/minimax-m3
+MODEL_CONVERSATION=opencode-go/gpt-5.6-luna
 ```
 
 Fallback policy:
 
-- Sol may fall back to Terra for ordinary planning, but not silently for the final high-value critical review.
-- Terra may fall back to Sol for important analysis.
-- Luna may fall back to Terra for bounded extraction.
-- Luna must not replace Sol for planning or critical review.
-- Model availability must be verified against the connected OpenAI project before live implementation.
+- MiniMax M3 falls back to GPT-5.6 Luna when the primary route is unavailable.
+- GPT-5.6 Luna falls back to MiniMax M3 for bounded execution and conversation turns.
+- Grok 4.5 is reserved for explicit quality escalation and is not an automatic route.
+- Model availability must be verified against the connected OpenCode Go workspace before deployment.
 
-OpenAI's hosted Responses Multi-agent feature is not the primary workflow engine. It is beta, uses the same request model and tool set for the root and its subagents, and is unsuitable for the core Sol-to-Luna-to-Terra DAG. It may later be used inside one same-model DAG node when bounded parallel exploration is beneficial.
+OpenCode runs as a private local service inside the API process boundary. The application-owned DAG remains the workflow engine; OpenCode provides model sessions, web search, structured output, and the restricted application-tool bridge.
 
 ### Conversation intelligence and ReAct loops
 
@@ -446,7 +445,7 @@ Required deployment configuration:
 Secrets stored only in the `gtm-agent-api-secrets` Kubernetes Secret:
 
 ```text
-OPENAI_API_KEY
+OPENCODE_KEY
 SUPABASE_URL
 SUPABASE_PUBLISHABLE_KEY
 SUPABASE_SECRET_KEY

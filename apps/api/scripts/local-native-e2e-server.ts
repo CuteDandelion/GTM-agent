@@ -52,7 +52,7 @@ const interactiveObjectService = createSupabaseInteractiveObjectService(admin);
 const projectionObserver = createRunProjectionObserver(interactiveObjectService);
 const scheduler = createResearchScheduler({
   agentRuntime: createLocalE2eAgentRuntime(),
-  availableModels: new Set(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]),
+  availableModels: new Set(["opencode-go/minimax-m3", "opencode-go/gpt-5.6-luna", "opencode-go/minimax-m3"]),
   checkpointStore: createProjectingCheckpointStore({
     checkpointStore: persistence.checkpointStore,
     runStore: persistence.runStore,

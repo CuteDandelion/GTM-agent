@@ -7,7 +7,7 @@ import { createLocalE2eAgentRuntime } from "../src/local-e2e-runtime.js";
 const request = (nodeId: string, requiredTools: string[] = []): AgentRunRequest => ({
   agentName: "Local E2E specialist",
   instructions: "Return one structured object.",
-  model: "gpt-5.6-terra",
+  model: "opencode-go/minimax-m3",
   reasoningEffort: "medium",
   tools: requiredTools,
   requiredTools,

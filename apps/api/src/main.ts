@@ -1,3 +1,7 @@
+import { fileURLToPath } from "node:url";
+
+import { createOpenCodeRuntime, startOpenCodeAgentService } from "@gtm/agents";
+
 import { buildServer } from "./server.js";
 import { createApplicationConversationAgent, createApplicationResearchService } from "./bootstrap.js";
 import { createEnvironmentAuthService } from "./supabase-auth.js";
@@ -8,15 +12,27 @@ import { createEnvironmentWorkspaceService } from "./supabase-workspace.js";
 const workspaceService = createEnvironmentWorkspaceService();
 const interactiveObjectService = createEnvironmentInteractiveObjectService() ?? new InMemoryInteractiveObjectService();
 const requiredEnvironment = [
-  "OPENAI_API_KEY",
+  "OPENCODE_KEY",
   "SUPABASE_URL",
   "SUPABASE_PUBLISHABLE_KEY",
   "SUPABASE_SECRET_KEY",
 ] as const;
-const configurationReady = requiredEnvironment.every((key) => Boolean(process.env[key]?.trim()));
+const openCodeService = await startOpenCodeAgentService({
+  directory: fileURLToPath(new URL("../", import.meta.url)),
+});
+const createRuntime = (toolDefinitions = {}) => createOpenCodeRuntime({
+  transport: openCodeService.transport,
+  bridge: openCodeService.bridge,
+  toolDefinitions,
+});
+const configurationReady = requiredEnvironment.every((key) => Boolean(process.env[key]?.trim()))
+  && await openCodeService.isReady();
 const server = buildServer({
-  conversationAgent: createApplicationConversationAgent(),
-  researchService: createApplicationResearchService({ interactiveObjectService }),
+  conversationAgent: createApplicationConversationAgent(createRuntime()),
+  researchService: createApplicationResearchService({
+    interactiveObjectService,
+    createAgentRuntime: createRuntime,
+  }),
   authService: createEnvironmentAuthService(),
   objectActionService: interactiveObjectService,
   ...(workspaceService ? { workspaceService } : {}),
@@ -28,6 +44,7 @@ const host = process.env.HOST ?? "0.0.0.0";
 async function shutdown(signal: string) {
   server.log.info({ signal }, "shutdown requested");
   await server.close();
+  await openCodeService.close();
   process.exitCode = 0;
 }
 
@@ -38,5 +55,6 @@ try {
   await server.listen({ host, port });
 } catch (error) {
   server.log.error(error);
+  await openCodeService.close();
   process.exitCode = 1;
 }
