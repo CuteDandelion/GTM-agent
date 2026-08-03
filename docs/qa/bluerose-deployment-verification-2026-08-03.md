@@ -1,17 +1,19 @@
 # Bluerose deployment verification — 2026-08-03
 
 This is the redacted evidence ledger for the deployed GTM API after the real
-provider iOS journey. No secret values or application payloads are retained.
+provider iOS and Android journeys. No secret values or application payloads are
+retained.
 
 ## Kubernetes
 
 - Context: `kubernetes-admin@kubernetes`
 - Node `ubuntu`: `Ready`
 - Namespace/deployment: `gtm-agent/gtm-agent-api`
-- Image: `ghcr.io/cutedandelion/gtm-agent-api@sha256:5b325d3b5ed935e231e6a250e9dd55d8e04877c662c2756895c32460df2b0cd5`
+- Source commit: `06c69095ae7a57aa113b6a843d13a6bd8ecaa280`
+- Image: `ghcr.io/cutedandelion/gtm-agent-api@sha256:10b8d210742107a7a9b9ae5d6190624a8da2e296cb9b0aafb9be6b2e99d47804`
 - Replicas: `1/1 ready`
 - Pod restarts: `0`
-- Service endpoint: `172.16.243.245:3000`
+- Service endpoint: `172.16.243.241:3000`
 - Cluster warning events: none
 
 ## Public HTTPS
@@ -35,9 +37,10 @@ same post-deployment health check.
 ## Supabase
 
 - Project: `gtm-agent` (`uqfkxtgdhmwcrrnbpayn`)
-- Applied migrations: 9
+- Applied migrations: 10
 - Latest migrations: conversation workflow queue, interactive-object
-  publication, and authenticated trusted-write restriction
+  publication, authenticated trusted-write restriction, and
+  `preserve_opportunity_decisions`
 - Security advisor findings: 0
 - Performance advisor findings: two informational unused-index notices
 

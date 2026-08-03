@@ -1,11 +1,11 @@
 {
     "schema_version": 2,
-    "commit": "b2e9e071cbd4f92242fec7c029eb086da4e96def",
-    "indexed_at": "2026-08-03T04:49:11Z",
+    "commit": "06c69095ae7a57aa113b6a843d13a6bd8ecaa280",
+    "indexed_at": "2026-08-03T04:53:53Z",
     "project": "agent-demo",
     "nodes": 2002,
     "edges": 3901,
     "original_size": 6160384,
-    "compressed_size": 1236089,
+    "compressed_size": 1235478,
     "compression_level": 3
 }

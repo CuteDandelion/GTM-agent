@@ -873,7 +873,7 @@ The MVP is complete only when:
 - Repository: greenfield implementation on `codex/gtm-orchestrator-mvp`, freshly indexed with a persisted graph artifact.
 - Bluerose access: confirmed through the hardened SSH wrapper; Kubernetes control plane and node are healthy.
 - Protected services: Portfolio and Cloudflare Tunnel remain healthy and untouched; the Portfolio endpoint returned HTTP 200 three times during pre-deployment inspection.
-- Bluerose API deployment: the dedicated `gtm-agent` namespace and ClusterIP service are live behind `https://gtm-agent-api.misakirose.com` on immutable image digest `sha256:5b325d3b5ed935e231e6a250e9dd55d8e04877c662c2756895c32460df2b0cd5`; the pod is ready with zero restarts, and `/health` plus `/ready` returned HTTP 200 in three consecutive external checks on 2026-08-03.
+- Bluerose API deployment: the dedicated `gtm-agent` namespace and ClusterIP service are live behind `https://gtm-agent-api.misakirose.com` on immutable image digest `sha256:10b8d210742107a7a9b9ae5d6190624a8da2e296cb9b0aafb9be6b2e99d47804` built from commit `06c6909`; the pod is ready with zero restarts, and `/health` plus `/ready` returned HTTP 200 in three consecutive external checks on 2026-08-03.
 - Supabase account access: confirmed.
 - Existing Supabase project: unrelated and protected from reuse.
 - Dedicated Supabase MVP project: `gtm-agent` (`uqfkxtgdhmwcrrnbpayn`, Frankfurt) is created; remote migration, RLS, Storage, Realtime, and owner-isolation checks pass. The local Supabase workload was stopped after its integration lane.
