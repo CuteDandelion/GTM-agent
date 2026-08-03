@@ -46,7 +46,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: api
-          image: ghcr.io/cutedandelion/gtm-agent-api@sha256:ae01c121262a7dbbe6aa6ca4912a42f88199f21e6befcc54a48b1e96855135c6
+          image: ghcr.io/cutedandelion/gtm-agent-api@sha256:d9ce1fe4cd7e78bd4b52a901bbaed959c3dda132297c192bd42a8f61e09948ee
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -62,10 +62,12 @@ spec:
               value: 0.0.0.0
             - name: PORT
               value: "3000"
+            - name: PATH
+              value: /app/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
             - name: OPENCODE_KEY
               valueFrom:
                 secretKeyRef:
-                  name: gtm-agent-api-secrets
+                  name: gtm-agent-opencode-key
                   key: OPENCODE_KEY
             - name: SUPABASE_URL
               valueFrom:
