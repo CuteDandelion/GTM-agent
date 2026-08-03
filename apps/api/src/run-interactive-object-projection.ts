@@ -62,16 +62,44 @@ function assessmentScore(assessment: JsonRecord) {
   if (score !== undefined && outOf !== undefined && outOf > 0) {
     return Math.max(0, Math.min(100, Math.round((score / outOf) * 100)));
   }
+  if (score !== undefined) return Math.max(0, Math.min(100, Math.round(score)));
   return fitScore(assessment.fit);
 }
 
-function projectionCompanyProfiles(profileOutput: JsonRecord | undefined) {
+function projectionCompanyProfiles(profileOutput: JsonRecord | undefined, opportunityOutput?: JsonRecord) {
   const legacyProfiles = asRecords(profileOutput?.companyProfiles);
   if (legacyProfiles.length) return legacyProfiles;
 
   const company = asRecord(profileOutput?.company);
   const assessment = asRecord(profileOutput?.icpAssessment);
-  if (!company || !assessment) return [];
+  if (!company || !assessment) {
+    const analyzedCompany = asRecord(opportunityOutput?.companyProfile);
+    const analyzedAssessment = asRecord(opportunityOutput?.icpAssessment);
+    if (!analyzedCompany || !analyzedAssessment) return [];
+    const whyFit = Array.isArray(analyzedAssessment.whyFit)
+      ? analyzedAssessment.whyFit.flatMap((value) => asText(value) ? [asText(value)!] : [])
+      : [];
+    return [{
+      company: analyzedCompany.company,
+      domain: analyzedCompany.domain,
+      profile: {
+        background: analyzedCompany.summary,
+        product: analyzedCompany.summary,
+        operatingScale: analyzedCompany.operatingContext,
+      },
+      sourceFacts: asRecords(opportunityOutput?.facts),
+      icpAssessment: {
+        ...analyzedAssessment,
+        rationale: whyFit.join(" "),
+        risks: analyzedAssessment.constraints,
+      },
+      automationHypotheses: asRecords(opportunityOutput?.automationOpportunities).map((opportunity) => ({
+        opportunity: opportunity.workflow,
+        value: opportunity.value,
+        controls: opportunity.humanApproval,
+      })),
+    }];
+  }
   const profile = asRecord(company.profile);
   const opportunity = asRecord(profileOutput?.opportunity) ?? asRecord(profileOutput?.recommendedOpportunity);
   const caveats = Array.isArray(profileOutput?.caveats)
@@ -202,12 +230,13 @@ export function createRunProjectionObserver(service: InteractiveObjectService) {
     if (snapshot.status !== "completed" || !snapshot.checkpoint) return;
 
     const profileOutput = nodeOutput(snapshot.checkpoint, "company-profile");
+    const opportunityOutput = nodeOutput(snapshot.checkpoint, "opportunity-analysis");
     const criticalReviewOutput = nodeOutput(snapshot.checkpoint, "critical-review");
     const finalReviewOutput = nodeOutput(snapshot.checkpoint, "final-review");
     const portfolioOutput = nodeOutput(snapshot.checkpoint, "portfolio-comparison");
     const crawlOutput = asRecord(nodeOutput(snapshot.checkpoint, "crawl-company")?.crawl_company);
     const approvedClaims = asRecords(finalReviewOutput?.approvedClaims);
-    const companyProfiles = projectionCompanyProfiles(profileOutput);
+    const companyProfiles = projectionCompanyProfiles(profileOutput, opportunityOutput);
     for (const companyProfile of companyProfiles) {
       const company = asText(companyProfile.company);
       const domain = asText(companyProfile.domain);

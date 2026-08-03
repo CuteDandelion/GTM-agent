@@ -12,7 +12,7 @@ import {
 } from "@gtm/contracts";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { SymbolView, type SymbolViewProps } from "expo-symbols";
-import { type ComponentProps, useEffect, useState } from "react";
+import { type ComponentProps, useEffect, useRef, useState } from "react";
 import { AccessibilityInfo, Animated, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -380,7 +380,7 @@ function LiveInteractiveObjects({
   const evidence = objects.find((object): object is EvidenceCollectionObject => object.type === "evidence_collection");
   const comparisons = objects.filter((object): object is CompanyComparisonObject => object.type === "company_comparison");
   const prompts = objects.filter((object): object is InteractionPromptObject => object.type === "interaction_prompt");
-  const primaryOpportunity = opportunities[0];
+  const primaryOpportunity = opportunities[opportunities.length - 1];
   const hasCombinedAssessment = Boolean(profile && score && primaryOpportunity);
   const combinedAssessment = profile && score && primaryOpportunity ? {
     company: profile.company,
@@ -405,7 +405,7 @@ function LiveInteractiveObjects({
     /> : null}
     {!hasCombinedAssessment && profile ? <ProfileCard profile={profile} /> : null}
     {!hasCombinedAssessment && score ? <IcpCard score={score} /> : null}
-    {(hasCombinedAssessment ? opportunities.slice(1) : opportunities).map((opportunity) => <OpportunityCard key={opportunity.id} opportunity={opportunity} />)}
+    {(hasCombinedAssessment ? opportunities.slice(0, -1) : opportunities).map((opportunity) => <OpportunityCard key={opportunity.id} opportunity={opportunity} />)}
     {!hasCombinedAssessment && evidence ? <EvidenceSummaryCard evidence={evidence} onEvidence={onEvidence} /> : null}
     {comparisons.map((comparison) => <ComparisonCard key={comparison.id} comparison={comparison} exporting={exporting} onExport={onExport} />)}
     {prompts.map((object) => <InteractionPromptCard key={object.id} object={object} onChoose={onPromptChoice} />)}
@@ -504,6 +504,7 @@ export function GtmConversationScreen({
   const [timeline, setTimeline] = useState<TimelineTurn[]>(() => initialTimeline(initialMessages));
   const [turnObjects, setTurnObjects] = useState<InteractiveObject[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const submissionInFlight = useRef(false);
   const [pendingRequest, setPendingRequest] = useState<{ runId: string; queuePosition?: number; baselineVersion: number }>();
   const [error, setError] = useState<string>();
   const [debugOpen, setDebugOpen] = useState(false);
@@ -523,7 +524,8 @@ export function GtmConversationScreen({
   const receivedInteractiveObjects = [...interactiveObjects, ...turnObjects];
   const allInteractiveObjects = receivedInteractiveObjects
     .filter((object, index, objects) => objects.findIndex((candidate) => candidate.id === object.id) === index);
-  const liveOpportunity = allInteractiveObjects.find((object) => object.type === "opportunity");
+  const liveOpportunities = allInteractiveObjects.filter((object): object is OpportunityObject => object.type === "opportunity");
+  const liveOpportunity = liveOpportunities[liveOpportunities.length - 1];
   const liveProgress = allInteractiveObjects.find((object): object is WorkflowProgressObject => object.type === "workflow_progress");
   const liveEvidence = allInteractiveObjects.find((object): object is EvidenceCollectionObject => object.type === "evidence_collection");
   const activeEvidence = liveEvidence ?? canonicalAcmeFixtures.evidence;
@@ -665,6 +667,8 @@ export function GtmConversationScreen({
         setError("Connect the API and sign in to save your seller profile.");
         return;
       }
+      if (submissionInFlight.current) return;
+      submissionInFlight.current = true;
       setSubmitting(true);
       try {
         await saveSellerProfile({
@@ -684,6 +688,7 @@ export function GtmConversationScreen({
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "Unable to save seller profile");
       } finally {
+        submissionInFlight.current = false;
         setSubmitting(false);
       }
       return;
@@ -697,6 +702,8 @@ export function GtmConversationScreen({
         setError("Connect the API and sign in to review this opportunity.");
         return;
       }
+      if (submissionInFlight.current) return;
+      submissionInFlight.current = true;
       setSubmitting(true);
       setError(undefined);
       try {
@@ -716,6 +723,7 @@ export function GtmConversationScreen({
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "Unable to record this review");
       } finally {
+        submissionInFlight.current = false;
         setSubmitting(false);
       }
       return;
@@ -725,6 +733,8 @@ export function GtmConversationScreen({
       setError("Write a message before sending.");
       return;
     }
+    if (submissionInFlight.current) return;
+    submissionInFlight.current = true;
     setSubmitting(true);
     setError(undefined);
     try {
@@ -780,6 +790,7 @@ export function GtmConversationScreen({
       setLastTurnDiagnostics({ kind: "Error", usedTools: [] });
       setError(caught instanceof Error ? caught.message : "Unable to start research");
     } finally {
+      submissionInFlight.current = false;
       setSubmitting(false);
     }
   };

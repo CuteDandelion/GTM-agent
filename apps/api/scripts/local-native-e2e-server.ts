@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 
 import { createClient } from "@supabase/supabase-js";
 
-import { createLocalE2eAgentRuntime } from "../src/local-e2e-runtime.js";
+import {
+  createLocalE2eAgentRuntime,
+  createLocalE2eConversationAgent,
+} from "../src/local-e2e-runtime.js";
 import {
   createProjectingCheckpointStore,
   createRunProjectionObserver,
@@ -78,6 +81,7 @@ const server = buildServer({
   workspaceService,
   objectActionService: interactiveObjectService,
   researchService,
+  conversationAgent: createLocalE2eConversationAgent(),
   configurationReady: true,
 });
 

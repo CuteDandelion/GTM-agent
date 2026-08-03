@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
 
 import { GtmConversationScreen } from "./GtmConversationScreen";
 
@@ -325,6 +325,22 @@ describe("GtmConversationScreen", () => {
     );
   });
 
+  it("restores the latest shortlisted opportunity after the conversation is reloaded", async () => {
+    const conversationId = "11111111-1111-4111-8111-111111111111";
+    const common = { conversationId, version: 1 } as const;
+    const screen = await render(<GtmConversationScreen
+      initialState="assessment"
+      interactiveObjects={[
+        { ...common, id: "profile-1", type: "company_profile", company: "Foodbegood", domain: "foodbegood.app", summary: "Food-sharing waitlist", facts: [], pros: ["Clear workflow"], cons: ["Budget unknown"] },
+        { ...common, id: "score-1", type: "icp_score", company: "Foodbegood", score: 76, band: "medium", reasons: ["Clear workflow"], gaps: ["Budget unknown"] },
+        { ...common, id: "opportunity-old", type: "opportunity", company: "Foodbegood", title: "Waitlist Triage Agent", summary: "Qualify waitlist demand.", impact: "high", value: "high", effort: "medium", fit: "high", status: "research" },
+        { ...common, id: "opportunity-latest", version: 2, type: "opportunity", company: "Foodbegood", title: "Waitlist Triage Agent", summary: "Qualify waitlist demand.", impact: "high", value: "high", effort: "medium", fit: "high", status: "pursue" },
+      ]}
+    />);
+
+    screen.getByRole("button", { name: "Shortlisted" });
+  });
+
   it("records a conversational correction against the trusted live object", async () => {
     const conversationId = "11111111-1111-4111-8111-111111111111";
     const common = { conversationId, version: 4 } as const;
@@ -407,6 +423,35 @@ describe("GtmConversationScreen", () => {
       }]}
     />);
     await waitFor(() => expect(screen.queryByLabelText("Waiting for agent response")).toBeNull());
+  });
+
+  it("admits one conversation turn when Android emits duplicate submit events", async () => {
+    const fetcher = jest.fn(async () => new Response(JSON.stringify({
+      kind: "research",
+      runId: "run-single-admission",
+      status: "queued",
+      queuePosition: 1,
+      message: "Research accepted.",
+      usedTools: [],
+      interactiveObjects: [],
+    }), { status: 202, headers: { "content-type": "application/json" } }));
+    const screen = await render(<GtmConversationScreen
+      initialState="empty"
+      apiBaseUrl="https://api.example.com"
+      accessToken="access-token"
+      fetcher={fetcher as typeof fetch}
+    />);
+
+    const composer = screen.getByLabelText("Message GTM Research Agent");
+    await fireEvent.changeText(composer, "Analyze foodbegood.app");
+    await act(async () => {
+      composer.props.onSubmitEditing();
+      composer.props.onSubmitEditing();
+      await Promise.resolve();
+    });
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    screen.getByText("Research accepted.");
   });
 
   it("keeps prior turns visible and accepts a domain-free follow-up in the same conversation", async () => {

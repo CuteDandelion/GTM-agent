@@ -103,6 +103,62 @@ describe("Supabase interactive-object projection integration", () => {
           payload: { optionId: "sales", label: "Sales workflow" },
         });
 
+        const opportunity = await service.publish({
+          ...shared,
+          objectKey: "opportunity:foodbegood.app",
+          object: {
+            type: "opportunity",
+            company: "Foodbegood",
+            title: "Waitlist Triage Agent",
+            summary: "Initial research projection",
+            impact: "high",
+            value: "high",
+            effort: "medium",
+            fit: "medium",
+            status: "research",
+          },
+        }) as { id: string; version: number };
+        await expect(service.applyAction({
+          objectId: opportunity.id,
+          ownerId: owner.id,
+          action: "shortlist",
+          expectedVersion: opportunity.version,
+          payload: {},
+        })).resolves.toMatchObject({
+          objectId: opportunity.id,
+          version: 2,
+          action: "shortlist",
+        });
+        await expect(service.publish({
+          ...shared,
+          objectKey: "opportunity:foodbegood.app",
+          object: {
+            type: "opportunity",
+            company: "Foodbegood",
+            title: "Waitlist Triage Agent",
+            summary: "Fresh queued-run projection",
+            impact: "high",
+            value: "high",
+            effort: "medium",
+            fit: "medium",
+            status: "research",
+          },
+        })).resolves.toMatchObject({ id: opportunity.id, version: 3 });
+        const projected = await service.listForConversation(owner.id, conversation.id) as Array<{
+          id: string;
+          version: number;
+          type: string;
+          status?: string;
+          summary?: string;
+        }>;
+        expect(projected.find((object) => object.id === opportunity.id)).toMatchObject({
+          id: opportunity.id,
+          version: 3,
+          type: "opportunity",
+          status: "pursue",
+          summary: "Fresh queued-run projection",
+        });
+
         const ownerClient = createClient(url, publishableKey, {
           auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
         });

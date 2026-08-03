@@ -96,6 +96,23 @@ test("dynamic interaction prompts and responses remain compatible with the datab
   assert.match(sql, /grant execute on function public\.apply_interactive_object_action[\s\S]*to service_role/i);
 });
 
+test("later research projections cannot overwrite a human opportunity decision", async () => {
+  const files = await readdir(new URL("../../supabase/migrations/", import.meta.url));
+  const migrationFile = files.find((file) => file.endsWith("_preserve_opportunity_decisions.sql"));
+  assert.ok(migrationFile, "expected a preserve_opportunity_decisions migration");
+  const sql = await readFile(
+    new URL(`../../supabase/migrations/${migrationFile}`, import.meta.url),
+    "utf8",
+  );
+
+  assert.match(sql, /create or replace function public\.publish_interactive_object/i);
+  assert.match(sql, /current_object\.object_type\s*=\s*'opportunity'/i);
+  assert.match(sql, /current_object\.payload->>'status'\s+in\s*\('pursue',\s*'nurture',\s*'reject'\)/i);
+  assert.match(sql, /jsonb_set\([\s\S]*p_payload[\s\S]*current_object\.payload->>'status'/i);
+  assert.match(sql, /for update/i);
+  assert.match(sql, /grant execute on function public\.publish_interactive_object[\s\S]*to service_role/i);
+});
+
 test("authenticated users retain only explicitly bounded trusted-table privileges", async () => {
   const files = await readdir(new URL("../../supabase/migrations/", import.meta.url));
   const migrationFile = files.find((file) => file.endsWith("_restrict_authenticated_trusted_writes.sql"));

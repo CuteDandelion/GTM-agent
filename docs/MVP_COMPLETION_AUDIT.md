@@ -39,8 +39,9 @@ provider-backed or deployed journey.
 
 - Supabase project `gtm-agent` (`uqfkxtgdhmwcrrnbpayn`) is active in
   `eu-central-1`.
-- Nine remote migrations are applied, including conversation workflow queue,
-  interactive-object publication, and authenticated trusted-write restriction.
+- Ten remote migrations are applied, including conversation workflow queue,
+  interactive-object publication, authenticated trusted-write restriction, and
+  the production-tested `preserve_opportunity_decisions` migration.
 - All 25 application tables have RLS enabled. The exact synthetic native-E2E
   user was deleted and its absence verified after the provider proof; the
   redacted result is retained in
