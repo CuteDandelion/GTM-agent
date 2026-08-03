@@ -44,8 +44,8 @@ provider-backed or deployed journey.
   the production-tested `preserve_opportunity_decisions` migration.
 - All 25 application tables have RLS enabled. The exact synthetic native-E2E
   user was deleted and its absence verified after the provider proof; the
-  redacted result is retained in
-  `docs/qa/native-ios/synthetic-user-cleanup-2026-08-03.json`.
+  redacted results are retained in the native iOS cleanup record and
+  `docs/qa/native-android/synthetic-user-cleanup-2026-08-03.json`.
 - Supabase security advisors report no findings. Performance advisors report
   only informational unused-index notices, expected for an empty MVP database.
 - Bluerose is healthy, with no warning events and protected workloads untouched.

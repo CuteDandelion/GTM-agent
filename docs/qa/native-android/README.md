@@ -37,5 +37,6 @@ The hosted `preserve_opportunity_decisions` migration was applied before this ru
 | Restart, persisted prompts, and persisted Shortlisted object | `gtm-real-openai-persistence.mp4` | `eeac404ab036a84d8e6808b551e2cd7cf2cec57348bd2e9492ccfb1cbfc27a21` |
 | Persisted Shortlisted screen | `gtm-real-openai-persisted-shortlisted.png` | `9251d552a089a733871c932e3210f8f96d75161bf1a9b50ab886f78260a6d2e2` |
 | Persisted accessibility hierarchy | `gtm-real-openai-persisted-shortlisted.xml` | `daed03e73197f60fbb80919511b0cc48d62678e1f886533543b33a3451a3bc4a` |
+| Synthetic-user cleanup verification | `synthetic-user-cleanup-2026-08-03.json` | `6894989b47851df4bffffb78ffa50929c376a81017938219b0c523f8559330a5` |
 
-The fixed synthetic user, application data, emulator recordings, emulator, Gradle daemon, and temporary files are removed after final verification. Hosted product data and infrastructure remain untouched except for deleting the marked synthetic user.
+After final verification, the fixed synthetic user was deleted and its exact-match count verified as zero. Application data and named emulator recordings were removed, the emulator was stopped, the temporary proof directory was deleted, and no local API or Supabase listener remained. No Gradle daemon was visible; the stop command could not start because no Java runtime remained available. Hosted product data and infrastructure remain untouched except for deleting the marked synthetic user.
