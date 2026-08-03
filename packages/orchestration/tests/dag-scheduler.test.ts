@@ -163,14 +163,14 @@ describe("deterministic DAG scheduler", () => {
     expect(result.executionCount).toBe(1);
   });
 
-  it("ships the full research DAG with deterministic, Luna, Terra, and Sol stages", () => {
+  it("ships the full research DAG with deterministic and role-routed OpenCode stages", () => {
     const workflow = createGtmResearchWorkflow();
     const byId = new Map(workflow.nodes.map((node) => [node.id, node]));
 
     expect(byId.get("validate-domain")?.role).toBe("deterministic");
     expect(byId.get("extract-company")?.role).toBe("executor");
-    expect(byId.get("extract-company")?.concurrencyKey).toBe("gpt-5.6-luna");
-    expect(byId.get("extract-product")?.concurrencyKey).toBe("gpt-5.6-luna");
+    expect(byId.get("extract-company")?.concurrencyKey).toBe("opencode-go/gpt-5.6-luna");
+    expect(byId.get("extract-product")?.concurrencyKey).toBe("opencode-go/gpt-5.6-luna");
     expect(byId.get("company-profile")?.role).toBe("analyst");
     expect(byId.get("critical-review")?.role).toBe("critic");
     expect(byId.get("final-review")?.requiredTools).toContain("web_search");
@@ -307,9 +307,9 @@ describe("deterministic DAG scheduler", () => {
       id: "model-aware-concurrency",
       budget: { maxNodeExecutions: 3, maxConcurrency: 3 },
       nodes: [
-        { id: "luna-a", dependencies: [], role: "executor", concurrencyKey: "gpt-5.6-luna", allowedTools: [], requiredTools: [], retries: 0, timeoutMs: 1_000 },
-        { id: "luna-b", dependencies: [], role: "executor", concurrencyKey: "gpt-5.6-luna", allowedTools: [], requiredTools: [], retries: 0, timeoutMs: 1_000 },
-        { id: "terra", dependencies: [], role: "analyst", concurrencyKey: "gpt-5.6-terra", allowedTools: [], requiredTools: [], retries: 0, timeoutMs: 1_000 },
+        { id: "flash-a", dependencies: [], role: "executor", concurrencyKey: "opencode-go/gpt-5.6-luna", allowedTools: [], requiredTools: [], retries: 0, timeoutMs: 1_000 },
+        { id: "flash-b", dependencies: [], role: "executor", concurrencyKey: "opencode-go/gpt-5.6-luna", allowedTools: [], requiredTools: [], retries: 0, timeoutMs: 1_000 },
+        { id: "qwen", dependencies: [], role: "analyst", concurrencyKey: "opencode-go/minimax-m3", allowedTools: [], requiredTools: [], retries: 0, timeoutMs: 1_000 },
       ],
     });
     const activeByKey = new Map<string, number>();
@@ -331,7 +331,7 @@ describe("deterministic DAG scheduler", () => {
     }).run("run-model-aware", {});
 
     expect(result.status).toBe("completed");
-    expect(peakByKey.get("gpt-5.6-luna")).toBe(1);
+    expect(peakByKey.get("opencode-go/gpt-5.6-luna")).toBe(1);
   });
 
   it("cancels an in-flight run without completing its active node", async () => {

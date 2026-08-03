@@ -1,16 +1,4 @@
 import {
-  Agent,
-  codeInterpreterTool,
-  fileSearchTool,
-  run,
-  tool,
-  webSearchTool,
-  type AgentOutputType,
-  type FunctionTool,
-  type HostedTool,
-  type RunContext,
-} from "@openai/agents";
-import {
   resolveModel,
   type AgentRole,
   type ModelRegistry,
@@ -19,7 +7,22 @@ import {
 } from "@gtm/orchestration";
 import { z } from "zod";
 
+export { createOpenCodeRuntime, type OpenCodeSessionTransport } from "./opencode-runtime.js";
+export { createOpenCodeSessionTransport, startOpenCodeAgentService } from "./opencode-service.js";
+export {
+  createOpenCodeToolBridge,
+  startOpenCodeToolBridgeServer,
+  type OpenCodeToolBridge,
+} from "./opencode-tool-bridge.js";
+
 export type ReasoningEffort = "low" | "medium" | "high";
+
+export interface AgentOutputType {
+  type: "json_schema";
+  name?: string;
+  strict?: boolean;
+  schema: Record<string, unknown>;
+}
 
 export interface AgentRunRequest {
   agentName: string;
@@ -69,17 +72,6 @@ export interface FunctionToolAdapterDefinition {
   handler(input: unknown, context?: ToolRunContext): Promise<unknown>;
 }
 
-type AnyFunctionTool = FunctionTool<any, any, any>;
-
-const functionToolInputSchema = {
-  type: "object" as const,
-  properties: {
-    input: { type: "object", additionalProperties: true },
-  },
-  required: ["input"] as ["input"],
-  additionalProperties: true as const,
-};
-
 export const gtmNodeOutputType = {
   type: "json_schema" as const,
   name: "gtm_node_output",
@@ -92,25 +84,6 @@ export const gtmNodeOutputType = {
   },
 };
 
-export function createFunctionToolAdapters(
-  definitions: Record<string, FunctionToolAdapterDefinition>,
-): Record<string, AnyFunctionTool> {
-  return Object.fromEntries(Object.entries(definitions).map(([name, definition]) => [
-    name,
-    tool({
-      name,
-      description: definition.description,
-      parameters: functionToolInputSchema,
-      strict: false,
-      execute: async (parameters, runContext?: RunContext<ToolRunContext>) => JSON.stringify(
-        runContext?.context
-          ? await definition.handler((parameters as { input: unknown }).input, runContext.context)
-          : await definition.handler((parameters as { input: unknown }).input),
-      ),
-    }),
-  ]));
-}
-
 export function extractToolRunContext(input: unknown): ToolRunContext {
   const parsed = z.object({
     runId: z.string().min(1),
@@ -122,24 +95,6 @@ export function extractToolRunContext(input: unknown): ToolRunContext {
     nodeId: parsed.nodeId,
     ownerId: parsed.workflowInput.ownerId,
   };
-}
-
-export function normalizeProviderToolName(name: string): string {
-  if (name === "web_search_call") return "web_search";
-  if (name === "file_search_call") return "file_search";
-  if (name === "code_interpreter_call") return "code_interpreter";
-  return name;
-}
-
-export function selectAvailableToolNames(
-  requestedTools: string[],
-  vectorStoreIds: string[],
-  requiredTools: string[] = [],
-): string[] {
-  if (vectorStoreIds.length === 0 && requiredTools.includes("file_search")) {
-    throw new Error("file_search requires at least one configured vector store");
-  }
-  return requestedTools.filter((toolName) => toolName !== "file_search" || vectorStoreIds.length > 0);
 }
 
 const roleConfiguration: Record<AgentRole, {
@@ -303,65 +258,4 @@ export function resolveMaxOutputTokens(value?: number) {
     throw new Error("maxOutputTokens must be between 1 and 16384");
   }
   return resolved;
-}
-
-export function createOpenAIAgentsRuntime(options: {
-  vectorStoreIds?: string[];
-  customTools?: Record<string, AnyFunctionTool>;
-  maxTurns?: number;
-} = {}): AgentRuntime {
-  const vectorStoreIds = options.vectorStoreIds ?? [];
-  const customTools = options.customTools ?? {};
-
-  return async (request) => {
-    const enabledToolNames = selectAvailableToolNames(request.tools, vectorStoreIds, request.requiredTools);
-    const tools: Array<HostedTool | AnyFunctionTool> = enabledToolNames.map((toolName) => {
-      if (toolName === "web_search") {
-        return webSearchTool({ searchContextSize: "medium", externalWebAccess: true });
-      }
-      if (toolName === "file_search") {
-        return fileSearchTool(vectorStoreIds, { includeSearchResults: true, maxNumResults: 12 });
-      }
-      if (toolName === "code_interpreter") {
-        return codeInterpreterTool({ includeOutputs: true });
-      }
-      const customTool = customTools[toolName];
-      if (!customTool) throw new Error(`No OpenAI tool adapter is configured for ${toolName}`);
-      return customTool;
-    });
-
-    const agent = new Agent({
-      name: request.agentName,
-      instructions: request.instructions,
-      model: request.model,
-      modelSettings: {
-        reasoning: { effort: request.reasoningEffort },
-        text: { verbosity: "medium" },
-        parallelToolCalls: true,
-        maxTokens: resolveMaxOutputTokens(request.maxOutputTokens),
-        store: false,
-      },
-      outputType: request.outputType ?? gtmNodeOutputType,
-      tools,
-    });
-
-    const result = await run(agent, JSON.stringify(request.input), {
-      context: extractToolRunContext(request.input),
-      maxTurns: options.maxTurns ?? 12,
-    });
-    const usedTools = result.newItems.flatMap((item) => {
-      if (item.type !== "tool_call_item") return [];
-      const rawItem = item.rawItem;
-      if (rawItem.type === "hosted_tool_call" || rawItem.type === "function_call") {
-        return [normalizeProviderToolName(rawItem.name)];
-      }
-      return [];
-    });
-
-    return {
-      output: result.finalOutput,
-      usedTools: [...new Set(usedTools)],
-      ...(result.lastResponseId ? { responseId: result.lastResponseId } : {}),
-    };
-  };
 }

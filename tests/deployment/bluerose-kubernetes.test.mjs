@@ -27,7 +27,7 @@ test("the API has rollout, resource, and health protections", () => {
 });
 
 test("runtime secrets are referenced, never embedded in the manifest", () => {
-  for (const key of ["OPENAI_API_KEY", "SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY"]) {
+  for (const key of ["OPENCODE_KEY", "SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY"]) {
     assert.match(deployment, new RegExp(`name: ${key}[\\s\\S]*secretKeyRef:[\\s\\S]*name: gtm-agent-api-secrets[\\s\\S]*key: ${key}`));
   }
   assert.doesNotMatch(deployment, /sk-[A-Za-z0-9_-]+/);
@@ -42,7 +42,9 @@ test("the container runs as an unprivileged production process", () => {
   assert.match(deployment, /runAsUser:\s*1000/);
   assert.match(deployment, /runAsGroup:\s*1000/);
   assert.match(deployment, /volumeMounts:[\s\S]*name:\s*tmp[\s\S]*mountPath:\s*\/tmp/);
-  assert.match(deployment, /volumes:[\s\S]*name:\s*tmp[\s\S]*emptyDir:[\s\S]*sizeLimit:\s*64Mi/);
+  assert.match(deployment, /volumes:[\s\S]*name:\s*tmp[\s\S]*emptyDir:[\s\S]*sizeLimit:\s*256Mi/);
+  assert.match(dockerfile, /ENV XDG_DATA_HOME=\/tmp\/opencode-data/);
+  assert.match(dockerfile, /ENV XDG_CACHE_HOME=\/tmp\/opencode-cache/);
   assert.match(dockerfile, /EXPOSE 3000/);
   assert.match(dockerfile, /CMD \["\.\/node_modules\/\.bin\/tsx", "apps\/api\/src\/main\.ts"\]/);
   assert.doesNotMatch(dockerfile, /CMD \["npm"/);

@@ -80,10 +80,10 @@ export function createSupabaseResearchPersistence(
       version: 1,
       dag: { workflowId: "company-domain-research-v1" },
       model_policy: {
-        planner: "gpt-5.6-sol",
-        executor: "gpt-5.6-luna",
-        analyst: "gpt-5.6-terra",
-        critic: "gpt-5.6-sol",
+        planner: "opencode-go/minimax-m3",
+        executor: "opencode-go/gpt-5.6-luna",
+        analyst: "opencode-go/minimax-m3",
+        critic: "opencode-go/minimax-m3",
       },
       tool_policy: { externalWritesRequireApproval: true },
     }, { onConflict: "owner_id,name,version" }).select("id").single();

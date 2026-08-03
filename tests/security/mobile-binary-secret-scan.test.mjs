@@ -32,19 +32,19 @@ test("detects configured server secrets exactly but ignores publishable values",
   const findings = scanBufferForSecrets(
     Buffer.from("binary exact-server-value public-client-value"),
     [
-      { name: "OPENAI_API_KEY", value: "exact-server-value", privileged: true },
+      { name: "OPENCODE_KEY", value: "exact-server-value", privileged: true },
       { name: "SUPABASE_PUBLISHABLE_KEY", value: "public-client-value", privileged: false },
     ],
   );
 
-  assert.deepEqual(findings, [{ ruleId: "configured-secret", key: "OPENAI_API_KEY", offset: 7 }]);
+  assert.deepEqual(findings, [{ ruleId: "configured-secret", key: "OPENCODE_KEY", offset: 7 }]);
 });
 
 test("does not flag short placeholders or ordinary mobile configuration", async () => {
   const { scanBufferForSecrets } = await loadScanner();
   const findings = scanBufferForSecrets(
     Buffer.from("EXPO_PUBLIC_API_BASE_URL SUPABASE_URL sk-example sb_secret_example"),
-    [{ name: "OPENAI_API_KEY", value: "short", privileged: true }],
+    [{ name: "OPENCODE_KEY", value: "short", privileged: true }],
   );
 
   assert.deepEqual(findings, []);

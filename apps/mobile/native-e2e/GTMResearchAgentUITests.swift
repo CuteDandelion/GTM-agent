@@ -8,6 +8,32 @@ final class GTMResearchAgentUITests: XCTestCase {
     app.launch()
   }
 
+  func testOpenCodeConversationApiSmoke() throws {
+    let environment = ProcessInfo.processInfo.environment
+    let mode = try XCTUnwrap(environment["NATIVE_E2E_MODE"], "NATIVE_E2E_MODE is required")
+    try XCTSkipUnless(mode == "opencode-smoke", "Set NATIVE_E2E_MODE=opencode-smoke for the bounded API journey")
+    let email = try XCTUnwrap(environment["NATIVE_E2E_EMAIL"], "NATIVE_E2E_EMAIL is required")
+    let password = try XCTUnwrap(environment["NATIVE_E2E_PASSWORD"], "NATIVE_E2E_PASSWORD is required")
+    let prompt = "In one short sentence, what should I clarify before researching a company?"
+
+    signIn(email: email, password: password)
+    if app.staticTexts["Before we research companies, what should I call your business?"].waitForExistence(timeout: 30) {
+      for answer in [
+        "OpenCode API Smoke",
+        "AI and agent automation",
+        "Workflow automation",
+        "Human-approved delivery",
+      ] {
+        send(answer)
+      }
+    }
+
+    XCTAssertTrue(app.staticTexts["Start a new GTM conversation"].waitForExistence(timeout: 30))
+    send(prompt)
+    XCTAssertTrue(labeledElement(prompt).waitForExistence(timeout: 30), "The API prompt must render")
+    XCTAssertTrue(waitForAgentResponseCount(atLeast: 1, timeout: 120), "Expected one OpenCode-backed API response")
+  }
+
   func testProviderBackedConversationPersistsAcrossRelaunch() throws {
     let environment = ProcessInfo.processInfo.environment
     let mode = try XCTUnwrap(environment["NATIVE_E2E_MODE"], "NATIVE_E2E_MODE must be local or provider")
@@ -142,8 +168,8 @@ final class GTMResearchAgentUITests: XCTestCase {
   private func send(_ message: String) {
     let composer = element("message-composer")
     XCTAssertTrue(composer.waitForExistence(timeout: 30), "Message composer is unavailable")
-    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.915)).tap()
-    app.typeText(message)
+    composer.tap()
+    composer.typeText(message)
     let sendButton = app.buttons["Send message"]
     XCTAssertTrue(sendButton.waitForExistence(timeout: 5), "Send button is unavailable")
     sendButton.tap()
@@ -200,7 +226,9 @@ final class GTMResearchAgentUITests: XCTestCase {
 private extension XCUIElement {
   func clearAndEnterText(_ text: String) {
     tap()
-    if let currentValue = value as? String, !currentValue.isEmpty {
+    if let currentValue = value as? String,
+       !currentValue.isEmpty,
+       currentValue != label {
       typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: currentValue.count))
     }
     typeText(text)

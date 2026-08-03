@@ -20,12 +20,12 @@ export interface ModelRegistry {
 
 export function createModelRegistry(overrides: Partial<Record<AgentRole, Partial<ModelRoute>>> = {}): ModelRegistry {
   const routes: Record<AgentRole, ModelRoute> = {
-    planner: { preferred: "gpt-5.6-sol", fallbacks: ["gpt-5.6-terra"] },
-    executor: { preferred: "gpt-5.6-luna", fallbacks: ["gpt-5.6-terra"] },
-    analyst: { preferred: "gpt-5.6-terra", fallbacks: ["gpt-5.6-sol"] },
-    conversation: { preferred: "gpt-5.6-terra", fallbacks: ["gpt-5.6-sol"] },
-    critic: { preferred: "gpt-5.6-sol", fallbacks: [] },
-    portfolio: { preferred: "gpt-5.6-sol", fallbacks: [] },
+    planner: { preferred: "opencode-go/minimax-m3", fallbacks: ["opencode-go/gpt-5.6-luna"] },
+    executor: { preferred: "opencode-go/gpt-5.6-luna", fallbacks: ["opencode-go/minimax-m3"] },
+    analyst: { preferred: "opencode-go/minimax-m3", fallbacks: ["opencode-go/gpt-5.6-luna"] },
+    conversation: { preferred: "opencode-go/gpt-5.6-luna", fallbacks: ["opencode-go/minimax-m3"] },
+    critic: { preferred: "opencode-go/minimax-m3", fallbacks: ["opencode-go/gpt-5.6-luna"] },
+    portfolio: { preferred: "opencode-go/minimax-m3", fallbacks: ["opencode-go/gpt-5.6-luna"] },
   };
 
   for (const role of Object.keys(overrides) as AgentRole[]) {
@@ -446,9 +446,8 @@ export function createGtmResearchWorkflow(): WorkflowDefinition {
     return Array.isArray(capabilities) && capabilities.includes(capability);
   };
   const concurrencyKeyForRole = (role: NodeRole) => {
-    if (role === "executor") return "gpt-5.6-luna";
-    if (role === "analyst") return "gpt-5.6-terra";
-    if (role === "planner" || role === "critic" || role === "portfolio") return "gpt-5.6-sol";
+    if (role === "executor") return "opencode-go/gpt-5.6-luna";
+    if (role === "planner" || role === "analyst" || role === "critic" || role === "portfolio") return "opencode-go/minimax-m3";
     return undefined;
   };
   const node = (

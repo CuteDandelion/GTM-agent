@@ -62,11 +62,11 @@ spec:
               value: 0.0.0.0
             - name: PORT
               value: "3000"
-            - name: OPENAI_API_KEY
+            - name: OPENCODE_KEY
               valueFrom:
                 secretKeyRef:
                   name: gtm-agent-api-secrets
-                  key: OPENAI_API_KEY
+                  key: OPENCODE_KEY
             - name: SUPABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -101,10 +101,10 @@ spec:
           resources:
             requests:
               cpu: 50m
-              memory: 256Mi
+              memory: 384Mi
             limits:
               cpu: 500m
-              memory: 768Mi
+              memory: 1Gi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -114,7 +114,7 @@ spec:
       volumes:
         - name: tmp
           emptyDir:
-            sizeLimit: 64Mi
+            sizeLimit: 256Mi
 ---
 apiVersion: v1
 kind: Service

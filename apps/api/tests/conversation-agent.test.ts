@@ -12,7 +12,7 @@ describe("conversation agent", () => {
       usedTools: [],
       responseId: "response-1",
     }));
-    const agent = createConversationAgent({ runtime, availableModels: new Set(["gpt-5.6-terra"]) });
+    const agent = createConversationAgent({ runtime, availableModels: new Set(["opencode-go/minimax-m3"]) });
 
     const decision = await agent.decide({
       ownerId: "11111111-1111-4111-8111-111111111111",
@@ -33,7 +33,7 @@ describe("conversation agent", () => {
     });
     expect(runtime).toHaveBeenCalledWith(expect.objectContaining({
       agentName: "GTM conversation orchestrator",
-      model: "gpt-5.6-terra",
+      model: "opencode-go/minimax-m3",
       tools: ["web_search", "file_search", "code_interpreter"],
       requiredTools: [],
       input: expect.objectContaining({
@@ -53,7 +53,7 @@ describe("conversation agent", () => {
       },
       usedTools: ["send_email"],
     }));
-    const agent = createConversationAgent({ runtime, availableModels: new Set(["gpt-5.6-terra"]) });
+    const agent = createConversationAgent({ runtime, availableModels: new Set(["opencode-go/minimax-m3"]) });
 
     await expect(agent.decide({
       ownerId: "11111111-1111-4111-8111-111111111111",

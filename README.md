@@ -10,7 +10,7 @@ The approved product scope lives in [`docs/MVP_IMPLEMENTATION_PLAN.md`](docs/MVP
 - `apps/api` — Fastify API for authentication, atomic per-conversation FIFO research queues, Supabase-backed run/checkpoint recovery, cancellation/resume, and interactive-object actions.
 - `apps/prototype` — protected browser fidelity harness for the approved mobile design.
 - `packages/orchestration` — durable, budgeted DAG scheduler and GTM workflow.
-- `packages/agents` — OpenAI Agents SDK adapter with role/model/tool policies.
+- `packages/agents` — OpenCode runtime adapter with role/model/tool policies.
 - `packages/tools` — controlled tool gateway and evidence validation.
 - `packages/crawler` — SSRF-resistant bounded crawler.
 - `packages/documents` — bounded document parsing and prompt-injection boundary.

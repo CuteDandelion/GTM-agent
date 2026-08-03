@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import { buildSampleToolTraces, validateAccuracyManifest } from "@gtm/evals";
+import { createOpenCodeRuntime, startOpenCodeAgentService } from "@gtm/agents";
 
 import { createApplicationResearchService } from "../apps/api/src/bootstrap.js";
 import {
@@ -25,7 +26,11 @@ const protocolSourceUrls = [
 ];
 
 async function main() {
-  if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is required for the live accuracy evaluation");
+  if (!process.env.OPENCODE_KEY) throw new Error("OPENCODE_KEY is required for the live accuracy evaluation");
+  const openCode = await startOpenCodeAgentService({
+    directory: fileURLToPath(new URL("../apps/api/", import.meta.url)),
+  });
+  try {
   const manifest = validateAccuracyManifest(JSON.parse(await readFile(manifestUrl, "utf8")));
   const protocolFingerprint = evaluationProtocolFingerprint(await Promise.all(
     protocolSourceUrls.map((url) => readFile(url, "utf8")),
@@ -37,6 +42,11 @@ async function main() {
   const service = createApplicationResearchService({
     persistence,
     enqueue: (job) => { execution = job(); },
+    createAgentRuntime: (toolDefinitions) => createOpenCodeRuntime({
+      transport: openCode.transport,
+      bridge: openCode.bridge,
+      toolDefinitions,
+    }),
   });
   const input = {
     ownerId,
@@ -99,6 +109,9 @@ async function main() {
     result: "packages/evals/results/latest-raw.json",
     nextGate: "independent claim grading and score >= 97",
   }, null, 2));
+  } finally {
+    await openCode.close();
+  }
 }
 
 main().catch((error) => {

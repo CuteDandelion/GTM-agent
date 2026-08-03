@@ -20,6 +20,11 @@ FROM node:22.22.2-bookworm-slim AS runtime
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=3000
+ENV XDG_DATA_HOME=/tmp/opencode-data
+ENV XDG_CACHE_HOME=/tmp/opencode-cache
+ENV XDG_CONFIG_HOME=/tmp/opencode-config
+ENV XDG_STATE_HOME=/tmp/opencode-state
+ENV npm_config_cache=/tmp/npm-cache
 
 WORKDIR /app
 
